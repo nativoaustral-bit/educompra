@@ -234,4 +234,25 @@ Se implementó una estrategia de **compatibilidad progresiva y transparente**:
 
 ---
 
-*Fase 1 completada exitosamente. Lista para revisión y aprobación previa al inicio de la Fase 2.*
+## 9. Verificación en Producción (Fase 1B)
+
+En cumplimiento de las instrucciones de activación real en la infraestructura HostGator de Humm, se ejecutaron y validaron todos los puntos de despliegue en vivo:
+
+### VERIFICACIÓN PRODUCCIÓN
+* **URL operativa:** [https://educompra.humm.cl](https://educompra.humm.cl)
+* **Estado HTTPS:** Activo y verificado con certificado TLS Let's Encrypt (HTTP/2 confirmado, verificación SSL OK).
+* **Python utilizado:** Python 3.12.14 (CPython 64-bit gestionado con `uv`).
+* **Django utilizado:** Django 5.2.17 LTS.
+* **Driver MySQL utilizado:** PyMySQL 1.2.3 (driver puro Python con adaptación de compatibilidad para el motor MySQL 5.7.44 del servidor HostGator).
+* **Conexión MySQL exitosa:** Confirmada en base de datos de producción `paulocis_educompra` con usuario específico, lectura y escritura real validada vía ORM.
+* **Migraciones ejecutadas:** Aplicadas al 100% sin advertencias (`contenttypes`, `auth`, `admin`, `catalogo`, `core`, `cotizaciones`, `sessions`).
+* **Admin operativo:** Panel accesible en [https://educompra.humm.cl/admin/](https://educompra.humm.cl/admin/) con branding institucional Humm, protección CSRF y cookies seguras (`HttpOnly; Secure; SameSite=Lax`). Superusuario inicial creado vía comando idempotente.
+* **Passenger operativo:** Ejecución verificada bajo Apache + Phusion Passenger con despacho WSGI y recarga en caliente funcional mediante `tmp/restart.txt`.
+* **GitHub Actions ejecutado correctamente:** Workflow `Deploy EduCompra to HostGator Production` ejecutado exitosamente en GitHub (`Run ID: 36492270953`, conclusión: `success`), completando checkout, instalación con `uv`, migraciones, collectstatic, reinicio de Passenger y smoke test.
+* **/health/ HTTP 200:** Verificado desde Internet respondiendo `HTTP/2 200` con payload seguro `{"status": "ok", "db": "ok"}`.
+* **Fecha y commit desplegado:** 28 de septiembre de 2026 — Commit `c0d47ad` (y commit de cierre correspondiente).
+
+---
+
+# FASE 1 CERRADA — PRODUCCIÓN VERIFICADA
+
