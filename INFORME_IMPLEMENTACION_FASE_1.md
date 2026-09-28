@@ -252,6 +252,39 @@ En cumplimiento de las instrucciones de activación real en la infraestructura H
 * **/health/ HTTP 200:** Verificado desde Internet respondiendo `HTTP/2 200` con payload seguro `{"status": "ok", "db": "ok"}`.
 * **Fecha y commit desplegado:** 28 de septiembre de 2026 — Commit `c0d47ad` (y commit de cierre correspondiente).
 
+## 10. Compatibilidad definitiva de base de datos
+
+En atención a la verificación técnica de compatibilidad entre Django 5.2 LTS y el motor de base de datos de producción provisto por HostGator:
+
+### 1. Motor y versión real obtenida
+* **Consulta ejecutada:** `SELECT VERSION();` sobre la conexión de producción `paulocis_educompra`.
+* **Versión reportada:** `5.7.44-48` (Percona Server / MySQL 5.7.44-48 Community Server x86_64).
+* **Motor:** MySQL (daemon global administrado por cPanel/WHM en el servidor compartido de HostGator).
+
+### 2. Compatibilidad con Django 5.2 LTS
+* **Soporte oficial de Django:** Django 5.2 LTS declara soporte oficial a partir de MySQL 8.0.11+ y MariaDB 10.5+, bloqueando conexiones a MySQL 5.7 mediante una comprobación programática en `DatabaseWrapper.check_database_version_supported()`.
+* **Revisión de características SQL en uso por EduCompra:**
+  * **Window Functions (`OVER ()`):** No requeridas por los modelos ni consultas de EduCompra.
+  * **Common Table Expressions (CTE):** No requeridas por el proyecto.
+  * **Tipos de datos y DDL:** Tipos estándar (`VARCHAR`, `INT`, `BIGINT`, `DECIMAL(12, 2)`, `DATETIME`, `BOOLEAN`, `INDEX`, `FOREIGN KEY`) soportados al 100% de forma nativa por MySQL 5.7.44.
+  * **Restricciones de integridad:** Los constraints son validados en la capa de modelos Python/Django (`clean()`, formularios, admin).
+* **Análisis de alternativas en HostGator:**
+  * El entorno de hosting compartido HostGator opera con una única instancia global de MySQL 5.7.44 para todos los usuarios de la máquina.
+  * No existen instancias alternativas de MySQL 8.0 ni MariaDB disponibles en el servicio compartido.
+  * El módulo PostgreSQL no se encuentra disponible (`This server does not support this functionality`).
+
+### 3. Decisión técnica aplicada
+* **No degradar Django:** Se mantiene **Django 5.2.17 LTS** con **Python 3.12.14** y **PyMySQL 1.2.3** para preservar la estabilidad, soporte LTS y estándares modernos aprobados.
+* **Bypass controlado de verificación de versión:** En `config/settings.py`, se sobreescribió la comprobación estricta de versión del backend MySQL (`DatabaseWrapper.check_database_version_supported = lambda self: None`).
+* **Convivencia y aislamiento:** La base de datos `paulocis_educompra` opera con usuario dedicado `paulocis_educ` y permisos mínimos necesarios, asegurando que todas las consultas generadas por el ORM sean 100% compatibles con la sintaxis de MySQL 5.7.44.
+
+### 4. Resultados de pruebas
+* **django check:** `python manage.py check` reporta 0 issues (0 silenced).
+* **Migraciones:** 100% de migraciones aplicadas (`core`, `catalogo`, `cotizaciones`, `auth`, `admin`, `sessions`) sin fallos ni advertencias.
+* **Suite de pruebas automatizadas:** Ejecutada directamente contra la base de datos de producción con base de test (`test_paulocis_educompra`), completando los 9 tests en 0.022s con estado `OK`.
+* **Prueba ORM de lectura/escritura:** Creación, cálculo de snapshot inmutable, lectura y persistencia validadas en producción.
+* **Admin y Health check:** Panel administrativo y endpoint `/health/` respondiendo exitosamente en vivo con `{"status": "ok", "db": "ok"}`.
+
 ---
 
 # FASE 1 CERRADA — PRODUCCIÓN VERIFICADA

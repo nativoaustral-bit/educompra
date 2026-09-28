@@ -7,5 +7,5 @@ class EduCompraTestRunner(DiscoverRunner):
     """
     def build_suite(self, test_labels=None, extra_tests=None, **kwargs):
         if not test_labels:
-            test_labels = ["apps.core", "apps.catalogo", "apps.cotizaciones"]
+            test_labels = ["apps.core.tests", "apps.catalogo.tests", "apps.cotizaciones.tests"]
         return super().build_suite(test_labels=test_labels, extra_tests=extra_tests, **kwargs)
