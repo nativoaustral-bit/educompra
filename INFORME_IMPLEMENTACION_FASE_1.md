@@ -250,7 +250,7 @@ En cumplimiento de las instrucciones de activación real en la infraestructura H
 * **Passenger operativo:** Ejecución verificada bajo Apache + Phusion Passenger con despacho WSGI y recarga en caliente funcional mediante `tmp/restart.txt`.
 * **GitHub Actions ejecutado correctamente:** Workflow `Deploy EduCompra to HostGator Production` ejecutado exitosamente en GitHub (`Run ID: 36492270953`, conclusión: `success`), completando checkout, instalación con `uv`, migraciones, collectstatic, reinicio de Passenger y smoke test.
 * **/health/ HTTP 200:** Verificado desde Internet respondiendo `HTTP/2 200` con payload seguro `{"status": "ok", "db": "ok"}`.
-* **Fecha y commit desplegado:** 28 de septiembre de 2026 — Commit `c0d47ad` (y commit de cierre correspondiente).
+* **Fecha y commit desplegado:** 28 de septiembre de 2026 — Commit `708a1a6`.
 
 ## 10. Compatibilidad definitiva de base de datos
 
