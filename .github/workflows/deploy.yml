@@ -1,0 +1,62 @@
+name: Deploy EduCompra to HostGator Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Despliegue en Servidor HostGator
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Código
+        uses: actions/checkout@v4
+
+      - name: 2. Sincronizar Código y Reiniciar en HostGator
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/home1/paulocis/apps/educompra/app"
+            VENV_DIR="/home1/paulocis/apps/educompra/venv"
+            SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
+            SECRETS_DIR="/home1/paulocis/apps/educompra/secrets"
+
+            cd "$APP_DIR"
+            git fetch origin main
+            git checkout main
+            git merge origin/main --ff-only
+
+            # Instalar dependencias si hay cambios utilizando uv
+            /home1/paulocis/.local/bin/uv pip install -r requirements.txt --python "$VENV_DIR" --quiet
+
+            # Exportar variables de entorno de producción
+            set -a
+            source "${SECRETS_DIR}/.env"
+            set +a
+
+            # Ejecutar migraciones de base de datos
+            "${VENV_DIR}/bin/python" manage.py migrate --noinput
+
+            # Recolectar archivos estáticos
+            "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
+
+            # Reiniciar Phusion Passenger en HostGator
+            mkdir -p "${SUBDOMAIN_DIR}/tmp"
+            touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
+
+      - name: 3. Comprobación de Salud Web (Smoke Test)
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/health/)
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ Error: https://educompra.humm.cl/health/ devolvió código HTTP $HTTP_STATUS (esperado 200)." >&2
+            exit 1
+          fi
+          echo "✔ EduCompra en producción responde correctamente: HTTP $HTTP_STATUS"

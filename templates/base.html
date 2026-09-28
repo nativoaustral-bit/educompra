@@ -1,0 +1,50 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}EduCompra Humm — Tecnología para Educación{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/reset.css' %}">
+  <link rel="stylesheet" href="{% static 'css/educompra.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-container">
+      <a href="{% url 'core:home' %}" class="brand">
+        <span class="brand-badge">HUMM</span>
+        <span class="brand-title">EduCompra<span>.cl</span></span>
+      </a>
+      <nav class="header-nav">
+        <a href="{% url 'core:health' %}" class="nav-link" title="Estado del Servicio">Salud</a>
+        <a href="/admin/" class="btn-admin" title="Panel Administrativo">Administración ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-wrapper">
+    {% if messages %}
+      <div style="margin-bottom: 20px;">
+        {% for message in messages %}
+          <div style="padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-container">
+      <p><strong>EduCompra Humm</strong> — Cotizaciones y antecedentes técnicos para compras escolares y públicas.</p>
+      <p style="font-size: 0.8rem; color: #64748b;">Plataforma independiente del ecosistema Humm Chile. Vinculada a www.humm.cl.</p>
+    </div>
+  </footer>
+
+  <script src="{% static 'js/educompra.js' %}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>
