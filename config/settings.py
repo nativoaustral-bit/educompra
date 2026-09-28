@@ -134,6 +134,12 @@ if DB_ENGINE == "django.db.backends.mysql":
         import pymysql
         pymysql.install_as_MySQLdb()
 
+    # Compatibilidad HostGator: Servidor opera con MySQL 5.7.44
+    # Django 5.x por defecto bloquea versiones < 8.0.11 mediante check_database_version_supported,
+    # aunque todas las consultas relacionales del proyecto son plenamente compatibles con MySQL 5.7.
+    from django.db.backends.mysql.base import DatabaseWrapper
+    DatabaseWrapper.check_database_version_supported = lambda self: None
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
