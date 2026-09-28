@@ -32,8 +32,7 @@ jobs:
 
             cd "$APP_DIR"
             git fetch origin main
-            git checkout main
-            git merge origin/main --ff-only
+            git reset --hard origin/main
 
             # Instalar dependencias si hay cambios utilizando uv
             /home1/paulocis/.local/bin/uv pip install -r requirements.txt --python "$VENV_DIR" --quiet
