@@ -103,7 +103,6 @@ jobs:
           cd "$APP_DIR"
           "${VENV_DIR}/bin/python" manage.py migrate --noinput
           "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
-          "${VENV_DIR}/bin/python" manage.py activar_catalogo_publico_fase_4
 
           echo "=== 5. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
           chmod 755 "$SUBDOMAIN_DIR"
