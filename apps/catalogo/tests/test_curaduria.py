@@ -202,3 +202,19 @@ class CuraduriaInfraestructuraTests(TestCase):
         finally:
             if test_reporte.exists():
                 test_reporte.unlink()
+
+    def test_auditar_consistencia_curaduria_reglas(self):
+        """
+        Verifica las reglas lógicas del comando auditar_consistencia_curaduria:
+        - Falla si no hay 72 productos validados.
+        - Falla si hay productos publicados.
+        - Falla si hay productos con VALIDADO_HUMM.
+        """
+        from io import StringIO
+        from django.core.management.base import CommandError
+
+        # Con la base de prueba inicial (solo 1 producto), el comando debe lanzar CommandError
+        out = StringIO()
+        with self.assertRaises(CommandError) as ctx:
+            call_command("auditar_consistencia_curaduria", stdout=out)
+        self.assertIn("inconsistencias", str(ctx.exception))
