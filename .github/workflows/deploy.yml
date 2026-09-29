@@ -59,45 +59,39 @@ jobs:
           fi
           echo "✔ Verificación de exclusiones exitosa: 0 archivos Markdown, 0 .git, 0 .env, 0 SQLite."
 
-      - name: 6. Transferir Paquete Limpio a HostGator
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: "educompra_deploy.tar.gz"
-          target: "/home1/paulocis/apps/educompra"
+      - name: 6. Despliegue Atómico y Seguro en HostGator
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: 7. Ejecutar Despliegue Seguro y Reiniciar en HostGator
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 $SSH_USER@$SSH_HOST"
+
+          echo "=== 1. PREPARACIÓN Y RESPALDO EN HOSTGATOR ==="
+          $SSH_CMD 'bash -s' << 'EOF'
             set -euo pipefail
-
             BASE_APP_DIR="/home1/paulocis/apps/educompra"
             APP_DIR="${BASE_APP_DIR}/app"
             DATA_DIR="${BASE_APP_DIR}/data"
             MEDIA_DIR="${BASE_APP_DIR}/media"
             BACKUPS_DIR="${BASE_APP_DIR}/backups"
             SECRETS_DIR="${BASE_APP_DIR}/secrets"
-            VENV_DIR="${BASE_APP_DIR}/venv"
-            SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
-            TARBALL="${BASE_APP_DIR}/educompra_deploy.tar.gz"
 
-            echo "=== 1. ASEGURAR ESTRUCTURA PERSISTENTE FUERA DE APP ==="
             chmod 755 "$BASE_APP_DIR"
             mkdir -p "$DATA_DIR" "$MEDIA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR" "$APP_DIR"
             chmod 750 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
             chmod 755 "$APP_DIR" "$MEDIA_DIR"
 
-            # Migración de seguridad inicial: si db.sqlite3 todavía estaba en APP_DIR y no en DATA_DIR, preservarla
+            # Migración de seguridad inicial si db.sqlite3 estaba en APP_DIR
             if [ -f "${APP_DIR}/db.sqlite3" ] && [ ! -f "${DATA_DIR}/db.sqlite3" ]; then
-                echo "Protegiendo base de datos existente: migrando a DATA_DIR persistente..."
+                echo "Protegiendo base existente: migrando a DATA_DIR persistente..."
                 cp -p "${APP_DIR}/db.sqlite3" "${DATA_DIR}/db.sqlite3"
                 chmod 644 "${DATA_DIR}/db.sqlite3" || true
             fi
@@ -108,31 +102,38 @@ jobs:
                 cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/pre_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
             fi
 
-            echo "=== 2. LIMPIEZA DEL DIRECTORIO EJECUTABLE (APP_DIR) ==="
-            # Eliminar .git si existía de la arquitectura anterior
+            # Limpiar directorio de la app antes de extraer el nuevo código
             rm -rf "${APP_DIR}/.git"
-            # Limpiar archivos .md, reportes e historiales que no deben estar en producción
             find "$APP_DIR" -maxdepth 2 -name "*.md" -delete 2>/dev/null || true
             find "$APP_DIR" -maxdepth 2 -name "*.xlsx" -delete 2>/dev/null || true
             find "$APP_DIR" -maxdepth 2 -name "*.csv" -delete 2>/dev/null || true
+          EOF
 
-            echo "=== 3. EXTRACCIÓN DEL PAQUETE LIMPIO ==="
-            tar -xzf "$TARBALL" -C "$APP_DIR"
-            rm -f "$TARBALL"
+          echo "=== 2. TRANSMISIÓN Y EXTRACCIÓN DEL PAQUETE LIMPIO ==="
+          $SSH_CMD 'tar -xzf - -C /home1/paulocis/apps/educompra/app' < educompra_deploy.tar.gz
+
+          echo "=== 3. DEPENDENCIAS, MIGRACIONES, HIGIENE Y REINICIO ==="
+          $SSH_CMD 'bash -s' << 'EOF'
+            set -euo pipefail
+            BASE_APP_DIR="/home1/paulocis/apps/educompra"
+            APP_DIR="${BASE_APP_DIR}/app"
+            DATA_DIR="${BASE_APP_DIR}/data"
+            MEDIA_DIR="${BASE_APP_DIR}/media"
+            SECRETS_DIR="${BASE_APP_DIR}/secrets"
+            VENV_DIR="${BASE_APP_DIR}/venv"
+            SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
+
             chmod 755 "${APP_DIR}/passenger_wsgi.py"
-
-            # Eliminar explícitamente cualquier residuo no ejecutable que pudiera haber quedado
             rm -rf "${APP_DIR}/tests" "${APP_DIR}/data_import" "${APP_DIR}/scratch"
 
-            echo "=== 4. INSTALACIÓN DE DEPENDENCIAS CON UV ==="
+            # Instalar dependencias con uv
             /home1/paulocis/.local/bin/uv pip install -r "${APP_DIR}/requirements.txt" --python "$VENV_DIR" --quiet
 
-            echo "=== 5. VARIABLES DE ENTORNO Y MIGRACIONES ==="
+            # Cargar variables de entorno de producción
             set -a
             if [ -f "${SECRETS_DIR}/.env" ]; then
                 source "${SECRETS_DIR}/.env"
             fi
-            # Garantizar que DB_NAME y MEDIA_ROOT apunten a los directorios persistentes
             export DB_NAME="${DATA_DIR}/db.sqlite3"
             export MEDIA_ROOT="${MEDIA_DIR}"
             set +a
@@ -141,8 +142,7 @@ jobs:
             "${VENV_DIR}/bin/python" manage.py migrate --noinput
             "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
 
-            echo "=== 6. HIGIENE Y REINICIO DE SUBDOMAIN DOCUMENTROOT ==="
-            # El DocumentRoot público no debe tener ejecutables Python, Markdown, Git ni secretos
+            # Higiene estricta de DocumentRoot público: sin Python, sin Markdown, sin Git, sin SQLite
             chmod 755 "$SUBDOMAIN_DIR"
             rm -f "${SUBDOMAIN_DIR}/passenger_wsgi.py"
             rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
@@ -156,8 +156,9 @@ jobs:
             touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
             chmod 644 "${SUBDOMAIN_DIR}/tmp/restart.txt"
             echo "✔ Despliegue completado y Passenger reiniciado con éxito."
+          EOF
 
-      - name: 8. Comprobación de Salud Web (Smoke Test)
+      - name: 7. Comprobación de Salud Web (Smoke Test)
         run: |
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/health/)
           if [ "$HTTP_STATUS" != "200" ]; then
@@ -166,7 +167,7 @@ jobs:
           fi
           echo "✔ EduCompra en producción responde correctamente: HTTP $HTTP_STATUS"
 
-      - name: 9. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
+      - name: 8. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
         run: |
           # 1. Comprobar que ningún reporte Markdown esté expuesto públicamente
           STATUS_MD=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/INFORME_ACTIVACION_FASE_4B.md)
