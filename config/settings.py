@@ -121,24 +121,17 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # ==============================================================================
-# BASE DE DATOS (Soporte Dual: SQLite / MySQL-MariaDB)
+# BASE DE DATOS (Producción MVP: SQLite / Compatible para migración futura)
 # ==============================================================================
 
 DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.sqlite3")
 
 if DB_ENGINE == "django.db.backends.mysql":
-    # Intentar mysqlclient nativo primero; si falla, usar PyMySQL como fallback puro Python
     try:
         import MySQLdb  # noqa: F401
     except ImportError:
         import pymysql
         pymysql.install_as_MySQLdb()
-
-    # Compatibilidad HostGator: Servidor opera con MySQL 5.7.44
-    # Django 5.x por defecto bloquea versiones < 8.0.11 mediante check_database_version_supported,
-    # aunque todas las consultas relacionales del proyecto son plenamente compatibles con MySQL 5.7.
-    from django.db.backends.mysql.base import DatabaseWrapper
-    DatabaseWrapper.check_database_version_supported = lambda self: None
 
     DATABASES = {
         "default": {
@@ -155,10 +148,23 @@ if DB_ENGINE == "django.db.backends.mysql":
         }
     }
 else:
+    # SQLite para MVP: Ubicación configurable fuera del document root con timeout optimizado
+    db_name_str = os.getenv("DB_NAME", "db.sqlite3")
+    if os.path.isabs(db_name_str):
+        sqlite_db_path = Path(db_name_str)
+    else:
+        sqlite_db_path = BASE_DIR / db_name_str
+
+    # Asegurar que el directorio de datos exista
+    sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / os.getenv("DB_NAME", "db.sqlite3"),
+            "NAME": sqlite_db_path,
+            "OPTIONS": {
+                "timeout": 20,  # 20 segundos de espera para concurrencia en escrituras
+            },
         }
     }
 
