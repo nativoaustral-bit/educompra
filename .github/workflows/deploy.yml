@@ -48,6 +48,86 @@ jobs:
           find deploy_dist -type d -name "__pycache__" -exec rm -rf {} +
           find deploy_dist -type f -name "*.pyc" -delete
 
+          # Crear script de despliegue remoto seguro
+          cat << 'REMOTE_SCRIPT' > deploy_dist/deploy_remote.sh
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          BASE_APP_DIR="/home1/paulocis/apps/educompra"
+          APP_DIR="${BASE_APP_DIR}/app"
+          DATA_DIR="${BASE_APP_DIR}/data"
+          MEDIA_DIR="${BASE_APP_DIR}/media"
+          BACKUPS_DIR="${BASE_APP_DIR}/backups"
+          SECRETS_DIR="${BASE_APP_DIR}/secrets"
+          VENV_DIR="${BASE_APP_DIR}/venv"
+          SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
+
+          echo "=== 1. PREPARACIÓN Y RESPALDO EN HOSTGATOR ==="
+          chmod 755 "$BASE_APP_DIR"
+          mkdir -p "$DATA_DIR" "$MEDIA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR" "$APP_DIR"
+          chmod 750 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
+          chmod 755 "$APP_DIR" "$MEDIA_DIR"
+
+          # Migración de seguridad inicial si db.sqlite3 estaba en APP_DIR
+          if [ -f "${APP_DIR}/db.sqlite3" ] && [ ! -f "${DATA_DIR}/db.sqlite3" ]; then
+              echo "Protegiendo base existente: migrando a DATA_DIR persistente..."
+              cp -p "${APP_DIR}/db.sqlite3" "${DATA_DIR}/db.sqlite3"
+              chmod 644 "${DATA_DIR}/db.sqlite3" || true
+          fi
+
+          # Respaldo de seguridad previo al deploy si existe la base de datos
+          if [ -f "${DATA_DIR}/db.sqlite3" ]; then
+              echo "Generando snapshot de respaldo previo al despliegue..."
+              cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/pre_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
+          fi
+
+          echo "=== 2. HIGIENE Y PERMISOS DE EJECUCIÓN ==="
+          chmod 755 "${APP_DIR}/passenger_wsgi.py"
+          rm -rf "${APP_DIR}/tests" "${APP_DIR}/data_import" "${APP_DIR}/scratch" "${APP_DIR}/.git"
+          find "$APP_DIR" -maxdepth 2 -name "*.md" -delete 2>/dev/null || true
+          find "$APP_DIR" -maxdepth 2 -name "*.xlsx" -delete 2>/dev/null || true
+          find "$APP_DIR" -maxdepth 2 -name "*.csv" -delete 2>/dev/null || true
+
+          echo "=== 3. INSTALACIÓN DE DEPENDENCIAS CON UV ==="
+          /home1/paulocis/.local/bin/uv pip install -r "${APP_DIR}/requirements.txt" --python "$VENV_DIR" --quiet
+
+          echo "=== 4. VARIABLES DE ENTORNO Y MIGRACIONES ==="
+          set -a
+          if [ -f "${SECRETS_DIR}/.env" ]; then
+              source "${SECRETS_DIR}/.env"
+          fi
+          export DB_NAME="${DATA_DIR}/db.sqlite3"
+          export MEDIA_ROOT="${MEDIA_DIR}"
+          set +a
+
+          cd "$APP_DIR"
+          "${VENV_DIR}/bin/python" manage.py migrate --noinput
+          "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
+
+          echo "=== 5. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
+          chmod 755 "$SUBDOMAIN_DIR"
+          cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+          chmod 755 "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+
+          # Limpieza estricta de DocumentRoot público: sin Markdown, sin Git, sin .env, sin SQLite
+          rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
+          find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
+          find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.sqlite3" -delete 2>/dev/null || true
+          find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.xlsx" -delete 2>/dev/null || true
+          find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.csv" -delete 2>/dev/null || true
+
+          # Reiniciar Phusion Passenger
+          mkdir -p "${SUBDOMAIN_DIR}/tmp"
+          chmod 755 "${SUBDOMAIN_DIR}/tmp"
+          touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
+          chmod 644 "${SUBDOMAIN_DIR}/tmp/restart.txt"
+
+          # Eliminar script temporal
+          rm -f "${APP_DIR}/deploy_remote.sh"
+          echo "✔ Despliegue completado y Passenger reiniciado con éxito."
+          REMOTE_SCRIPT
+          chmod +x deploy_dist/deploy_remote.sh
+
           # Empaquetar bundle limpio
           tar -czf educompra_deploy.tar.gz -C deploy_dist .
           echo "✔ Paquete limpio creado con éxito: $(ls -lh educompra_deploy.tar.gz | awk '{print $5}')"
@@ -59,7 +139,7 @@ jobs:
           fi
           echo "✔ Verificación de exclusiones exitosa: 0 archivos Markdown, 0 .git, 0 .env, 0 SQLite."
 
-      - name: 6. Despliegue Atómico y Seguro en HostGator
+      - name: 6. Despliegue Atómico en HostGator (Single SSH Connection)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -72,95 +152,9 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-          SSH_CMD="ssh -i ~/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 $SSH_USER@$SSH_HOST"
-
-          echo "=== 1. PREPARACIÓN Y RESPALDO EN HOSTGATOR ==="
-          $SSH_CMD 'bash -s' << 'EOF'
-            set -euo pipefail
-            BASE_APP_DIR="/home1/paulocis/apps/educompra"
-            APP_DIR="${BASE_APP_DIR}/app"
-            DATA_DIR="${BASE_APP_DIR}/data"
-            MEDIA_DIR="${BASE_APP_DIR}/media"
-            BACKUPS_DIR="${BASE_APP_DIR}/backups"
-            SECRETS_DIR="${BASE_APP_DIR}/secrets"
-
-            chmod 755 "$BASE_APP_DIR"
-            mkdir -p "$DATA_DIR" "$MEDIA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR" "$APP_DIR"
-            chmod 750 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
-            chmod 755 "$APP_DIR" "$MEDIA_DIR"
-
-            # Migración de seguridad inicial si db.sqlite3 estaba en APP_DIR
-            if [ -f "${APP_DIR}/db.sqlite3" ] && [ ! -f "${DATA_DIR}/db.sqlite3" ]; then
-                echo "Protegiendo base existente: migrando a DATA_DIR persistente..."
-                cp -p "${APP_DIR}/db.sqlite3" "${DATA_DIR}/db.sqlite3"
-                chmod 644 "${DATA_DIR}/db.sqlite3" || true
-            fi
-
-            # Respaldo de seguridad previo al deploy si existe la base de datos
-            if [ -f "${DATA_DIR}/db.sqlite3" ]; then
-                echo "Generando snapshot de respaldo previo al despliegue..."
-                cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/pre_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
-            fi
-
-            # Limpiar directorio de la app antes de extraer el nuevo código
-            rm -rf "${APP_DIR}/.git"
-            find "$APP_DIR" -maxdepth 2 -name "*.md" -delete 2>/dev/null || true
-            find "$APP_DIR" -maxdepth 2 -name "*.xlsx" -delete 2>/dev/null || true
-            find "$APP_DIR" -maxdepth 2 -name "*.csv" -delete 2>/dev/null || true
-          EOF
-
-          echo "=== 2. TRANSMISIÓN Y EXTRACCIÓN DEL PAQUETE LIMPIO ==="
-          $SSH_CMD 'tar -xzf - -C /home1/paulocis/apps/educompra/app' < educompra_deploy.tar.gz
-
-          echo "=== 3. DEPENDENCIAS, MIGRACIONES, HIGIENE Y REINICIO ==="
-          $SSH_CMD 'bash -s' << 'EOF'
-            set -euo pipefail
-            BASE_APP_DIR="/home1/paulocis/apps/educompra"
-            APP_DIR="${BASE_APP_DIR}/app"
-            DATA_DIR="${BASE_APP_DIR}/data"
-            MEDIA_DIR="${BASE_APP_DIR}/media"
-            SECRETS_DIR="${BASE_APP_DIR}/secrets"
-            VENV_DIR="${BASE_APP_DIR}/venv"
-            SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
-
-            chmod 755 "${APP_DIR}/passenger_wsgi.py"
-            rm -rf "${APP_DIR}/tests" "${APP_DIR}/data_import" "${APP_DIR}/scratch"
-
-            # Instalar dependencias con uv
-            /home1/paulocis/.local/bin/uv pip install -r "${APP_DIR}/requirements.txt" --python "$VENV_DIR" --quiet
-
-            # Cargar variables de entorno de producción
-            set -a
-            if [ -f "${SECRETS_DIR}/.env" ]; then
-                source "${SECRETS_DIR}/.env"
-            fi
-            export DB_NAME="${DATA_DIR}/db.sqlite3"
-            export MEDIA_ROOT="${MEDIA_DIR}"
-            set +a
-
-            cd "$APP_DIR"
-            "${VENV_DIR}/bin/python" manage.py migrate --noinput
-            "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
-
-            # Sincronizar passenger_wsgi.py en DocumentRoot con permisos 0755 (requerido por Apache suEXEC)
-            cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
-            chmod 755 "${SUBDOMAIN_DIR}/passenger_wsgi.py"
-
-            # Higiene estricta de DocumentRoot público: sin Markdown, sin Git, sin .env, sin SQLite
-            chmod 755 "$SUBDOMAIN_DIR"
-            rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
-            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
-            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.sqlite3" -delete 2>/dev/null || true
-            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.xlsx" -delete 2>/dev/null || true
-            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.csv" -delete 2>/dev/null || true
-
-            # Reiniciar Phusion Passenger
-            mkdir -p "${SUBDOMAIN_DIR}/tmp"
-            chmod 755 "${SUBDOMAIN_DIR}/tmp"
-            touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
-            chmod 644 "${SUBDOMAIN_DIR}/tmp/restart.txt"
-            echo "✔ Despliegue completado y Passenger reiniciado con éxito."
-          EOF
+          echo "=== TRANSMISIÓN DIRECTA Y EJECUCIÓN ATÓMICA ==="
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=60 -o ServerAliveInterval=15 "$SSH_USER@$SSH_HOST" \
+            "mkdir -p /home1/paulocis/apps/educompra/app && tar -xzf - -C /home1/paulocis/apps/educompra/app && bash /home1/paulocis/apps/educompra/app/deploy_remote.sh" < educompra_deploy.tar.gz
 
       - name: 7. Comprobación de Salud Web (Smoke Test)
         run: |
