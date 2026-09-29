@@ -5,201 +5,28 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      admin_action:
-        description: 'Accion a ejecutar: deploy (defecto) | diagnostico | activar_catalogo'
-        required: false
-        default: 'deploy'
 
 jobs:
   test_and_deploy:
-    name: Pipeline EduCompra HostGator
+    name: Test, Empaquetado Selectivo y Despliegue en HostGator
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Setup SSH Keys para HostGator
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-      # ========================================================================
-      # MODO A: DIAGNÓSTICO DE BASE DE DATOS EN HOSTGATOR
-      # ========================================================================
-      - name: Modo Diagnóstico - Inspección de Bases de Datos en HostGator
-        if: ${{ github.event.inputs.admin_action == 'diagnostico' }}
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-        run: |
-          SSH_CMD="ssh -i ~/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 $SSH_USER@$SSH_HOST"
-          $SSH_CMD 'bash -s' << 'EOF'
-            set -e
-            python3 - << 'PYEOF'
-import os, glob, sqlite3
-
-print("======================================================================")
-print("EDUCOMPRA HUMM — DIAGNÓSTICO DE BASES SQLITE EN HOSTGATOR")
-print("======================================================================")
-dbs = glob.glob("/home1/paulocis/**/*.sqlite3", recursive=True)
-if not dbs:
-    print("No se encontraron archivos .sqlite3 en /home1/paulocis/")
-for db in sorted(dbs):
-    size = os.path.getsize(db)
-    print(f"\nArchivo: {db} (Tamaño: {size:,} bytes)")
-    try:
-        conn = sqlite3.connect(db)
-        c = conn.cursor()
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='catalogo_producto'")
-        if c.fetchone():
-            c.execute("SELECT count(*) FROM catalogo_producto")
-            total = c.fetchone()[0]
-            c.execute("SELECT activo, count(*) FROM catalogo_producto GROUP BY activo")
-            activos = dict(c.fetchall())
-            c.execute("SELECT estado_curaduria, count(*) FROM catalogo_producto GROUP BY estado_curaduria")
-            curaduria = dict(c.fetchall())
-            c.execute("SELECT publicado, count(*) FROM catalogo_producto GROUP BY publicado")
-            pub = dict(c.fetchall())
-            print(f"  Total catalogo_producto: {total}")
-            print(f"  Activos (1=True, 0=False): {activos}")
-            print(f"  Estado Curaduría: {curaduria}")
-            print(f"  Publicado (1=True, 0=False): {pub}")
-        else:
-            print("  (Sin tabla catalogo_producto)")
-        conn.close()
-    except Exception as e:
-        print(f"  Error al leer: {e}")
-
-print("\n======================================================================")
-print("CONFIGURACIÓN DE ENTORNOS EN SECRETS/.ENV")
-print("======================================================================")
-env_path = "/home1/paulocis/apps/educompra/secrets/.env"
-if os.path.exists(env_path):
-    print("secrets/.env EXISTE:")
-    with open(env_path) as f:
-        for line in f:
-            if any(k in line for k in ["DB_NAME", "DJANGO_ENV", "MEDIA_ROOT", "ALLOWED_HOSTS"]):
-                print("  ", line.strip())
-else:
-    print("secrets/.env NO EXISTE")
-PYEOF
-          EOF
-
-      # ========================================================================
-      # MODO B: ACTIVACIÓN ADMINISTRATIVA DEL CATÁLOGO (Fase 4B)
-      # ========================================================================
-      - name: Modo Activación - Publicación Controlada de 72 Productos
-        if: ${{ github.event.inputs.admin_action == 'activar_catalogo' }}
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-        run: |
-          SSH_CMD="ssh -i ~/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 $SSH_USER@$SSH_HOST"
-          $SSH_CMD 'bash -s' << 'EOF'
-            set -euo pipefail
-            BASE_APP_DIR="/home1/paulocis/apps/educompra"
-            APP_DIR="${BASE_APP_DIR}/app"
-            DATA_DIR="${BASE_APP_DIR}/data"
-            MEDIA_DIR="${BASE_APP_DIR}/media"
-            SECRETS_DIR="${BASE_APP_DIR}/secrets"
-            VENV_DIR="${BASE_APP_DIR}/venv"
-            SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
-
-            cd "$APP_DIR"
-            set -a
-            if [ -f "${SECRETS_DIR}/.env" ]; then
-              source "${SECRETS_DIR}/.env"
-            fi
-            export DB_NAME="${DATA_DIR}/db.sqlite3"
-            export MEDIA_ROOT="${MEDIA_DIR}"
-            set +a
-
-            VENV="${VENV_DIR}/bin/python"
-
-            echo "=== 1. VERIFICACIÓN PREVIA DE LA BASE PRODUCTIVA ==="
-            $VENV manage.py shell << 'PYEOF'
-from django.db.models import Count
-from apps.catalogo.models import Producto
-
-total = Producto.objects.count()
-activos = Producto.objects.filter(activo=True).count()
-validados = Producto.objects.filter(estado_curaduria="VALIDADO").count()
-publicados = Producto.objects.filter(publicado=True).count()
-no_publicados = Producto.objects.filter(publicado=False).count()
-
-print(f"Total Producto: {total}")
-print(f"activo=True: {activos}")
-print(f"estado_curaduria='VALIDADO': {validados}")
-print(f"publicado=True: {publicados}")
-print(f"publicado=False: {no_publicados}")
-PYEOF
-
-            echo "=== 2. EJECUCIÓN DRY-RUN DE ACTIVACIÓN ==="
-            $VENV manage.py activar_catalogo_publico_fase_4 --dry-run
-
-            echo "=== 3. ACTIVACIÓN PRODUCTIVA DEFINITIVA ==="
-            $VENV manage.py activar_catalogo_publico_fase_4
-
-            echo "=== 4. VERIFICACIÓN POSTERIOR DE LA BASE PRODUCTIVA ==="
-            $VENV manage.py shell << 'PYEOF'
-from apps.catalogo.models import Producto
-
-total = Producto.objects.count()
-publicados = Producto.objects.filter(publicado=True).count()
-no_publicados = Producto.objects.filter(publicado=False).count()
-validados = Producto.objects.filter(estado_curaduria="VALIDADO").count()
-validados_humm = Producto.objects.filter(estado_especificacion_neutral="VALIDADO_HUMM").count()
-
-print(f"Total Producto: {total} (Esperado: 929)")
-print(f"Publicados: {publicados} (Esperado: 72)")
-print(f"No Publicados: {no_publicados} (Esperado: 857)")
-print(f"estado_curaduria='VALIDADO': {validados} (Esperado: 72)")
-print(f"estado_especificacion_neutral='VALIDADO_HUMM': {validados_humm} (Esperado: 0)")
-
-assert total == 929, f"Total esperado 929 pero fue {total}"
-assert publicados == 72, f"Publicados esperado 72 pero fue {publicados}"
-assert no_publicados == 857, f"No publicados esperado 857 pero fue {no_publicados}"
-assert validados == 72, f"Validados esperado 72 pero fue {validados}"
-assert validados_humm == 0, f"Validados Humm esperado 0 pero fue {validados_humm}"
-print("✔ TODOS LOS CONTEOS DE BASE PRODUCTIVA VERIFICADOS AL 100%.")
-PYEOF
-
-            echo "=== 5. REINICIAR PASSENGER ==="
-            touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
-            echo "✔ Passenger reiniciado con éxito."
-          EOF
-
-      # ========================================================================
-      # MODO C: DESPLIEGUE SELECTIVO (Por defecto en push y workflow_dispatch)
-      # ========================================================================
       - name: 1. Checkout Código Canónico desde GitHub
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         uses: actions/checkout@v4
 
       - name: 2. Configurar Python y Ejecutar Tests (Gate de Calidad)
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
 
       - name: 3. Instalar Dependencias de Test
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 4. Ejecutar Suite de Tests Automatizados
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         env:
           SECRET_KEY: 'ci-temporary-testing-secret-key-not-for-prod'
           ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
@@ -208,7 +35,6 @@ PYEOF
           python manage.py test
 
       - name: 5. Construir Paquete de Despliegue Selectivo (Sin Docs, Sin Tests, Sin .git)
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         run: |
           set -euo pipefail
           rm -rf deploy_dist educompra_deploy.tar.gz
@@ -235,6 +61,7 @@ PYEOF
           SECRETS_DIR="${BASE_APP_DIR}/secrets"
           VENV_DIR="${BASE_APP_DIR}/venv"
           SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
+          VENV_PYTHON="${VENV_DIR}/bin/python"
 
           echo "=== 1. PREPARACIÓN Y RESPALDO EN HOSTGATOR ==="
           chmod 755 "$BASE_APP_DIR"
@@ -275,10 +102,36 @@ PYEOF
           set +a
 
           cd "$APP_DIR"
-          "${VENV_DIR}/bin/python" manage.py migrate --noinput
-          "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
+          "$VENV_PYTHON" manage.py migrate --noinput
+          "$VENV_PYTHON" manage.py collectstatic --noinput
 
-          echo "=== 5. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
+          echo "=== 5. VERIFICACIÓN Y ACTIVACIÓN CONTROLADA DEL CATÁLOGO ==="
+          PUB_ACTUAL=$("$VENV_PYTHON" -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.filter(publicado=True).count())")
+          echo "Estado actual de productos publicados: $PUB_ACTUAL"
+
+          if [ "$PUB_ACTUAL" -eq 0 ]; then
+              echo "--- 5.1 CONTEOS PREVIOS EN BASE PRODUCTIVA ---"
+              "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion
+
+              VAL_ACTUAL=$("$VENV_PYTHON" -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.filter(estado_curaduria='VALIDADO').count())")
+              if [ "$VAL_ACTUAL" -ne 72 ]; then
+                  echo "--- 5.2 SINCRONIZANDO CURADURÍA FASE 3 EN BD PRODUCTIVA ---"
+                  "$VENV_PYTHON" manage.py sincronizar_curaduria_fase_3
+              fi
+
+              echo "--- 5.3 EJECUCIÓN DRY-RUN OBLIGATORIA ---"
+              "$VENV_PYTHON" manage.py activar_catalogo_publico_fase_4 --dry-run
+
+              echo "--- 5.4 ACTIVACIÓN DEFINITIVA DE LOS 72 PRODUCTOS ---"
+              "$VENV_PYTHON" manage.py activar_catalogo_publico_fase_4
+
+              echo "--- 5.5 AUDITORÍA POSTERIOR CON ASERCIÓN ESTRICTA ---"
+              "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion --assert-72
+          else
+              echo "El catálogo ya se encuentra previamente activado con $PUB_ACTUAL productos públicos."
+          fi
+
+          echo "=== 6. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
           chmod 755 "$SUBDOMAIN_DIR"
           cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
           chmod 755 "${SUBDOMAIN_DIR}/passenger_wsgi.py"
@@ -314,12 +167,18 @@ PYEOF
           echo "✔ Verificación de exclusiones exitosa: 0 archivos Markdown, 0 .git, 0 .env, 0 SQLite."
 
       - name: 6. Despliegue Atómico en HostGator (Single SSH Connection con Reintentos)
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
           echo "=== TRANSMISIÓN DIRECTA Y EJECUCIÓN ATÓMICA ==="
           MAX_RETRIES=4
           for i in $(seq 1 $MAX_RETRIES); do
@@ -339,10 +198,10 @@ PYEOF
           done
 
       - name: 7. Comprobación de Salud Web y Catálogo Activo (Smoke Test)
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/health/)
@@ -352,6 +211,7 @@ PYEOF
           fi
           echo "✔ Endpoint /health/ responde HTTP $HTTP_STATUS"
 
+          CATALOGO_RESP=$(curl -sL https://educompra.humm.cl/catalogo/)
           HTTP_CATALOGO=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/catalogo/)
           if [ "$HTTP_CATALOGO" != "200" ]; then
             echo "❌ Error: Catálogo público devolvió código HTTP $HTTP_CATALOGO (esperado 200)." >&2
@@ -359,26 +219,38 @@ PYEOF
           fi
           echo "✔ Catálogo público responde HTTP $HTTP_CATALOGO"
 
+          if echo "$CATALOGO_RESP" | grep -q "etapa de validación"; then
+            echo "❌ Error: El catálogo público aún muestra mensaje de etapa de validación." >&2
+            exit 1
+          fi
+          echo "✔ Mensaje de validación no presente en catálogo público."
+
+          if ! echo "$CATALOGO_RESP" | grep -q "72"; then
+            echo "❌ Error: No se encontró la referencia a 72 productos en la respuesta del catálogo." >&2
+            exit 1
+          fi
+          echo "✔ Respuesta pública del catálogo confirma 72 productos."
+
           # Verificación no destructiva en el servidor: confirmar que exactamente 72 productos están publicados
-          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" 'bash -s' << 'EOF'
-            set -a
-            if [ -f /home1/paulocis/apps/educompra/secrets/.env ]; then
-              source /home1/paulocis/apps/educompra/secrets/.env
+          echo "Ejecutando auditoría de estado del catálogo en HostGator..."
+          MAX_RETRIES=4
+          REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion --assert-72"
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Intento $i de auditoría remota..."
+            if ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "$REMOTE_CMD"; then
+              echo "✔ Auditoría remota de catálogo verificada exitosamente (72 productos públicos)."
+              break
+            else
+              echo "Fallo de conexión o auditoría en intento $i. Reintentando en 6s..."
+              sleep 6
             fi
-            export DB_NAME="/home1/paulocis/apps/educompra/data/db.sqlite3"
-            set +a
-            cd /home1/paulocis/apps/educompra/app
-            PUB_COUNT=$(/home1/paulocis/apps/educompra/venv/bin/python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.publicables(user=None).count())")
-            echo "Cantidad de productos publicados detectados en producción: $PUB_COUNT"
-            if [ "$PUB_COUNT" -ne 72 ]; then
-              echo "❌ ERROR CRÍTICO: Se esperaban 72 productos públicos en producción, pero se detectaron $PUB_COUNT." >&2
+            if [ "$i" -eq "$MAX_RETRIES" ]; then
+              echo "❌ ERROR: No se pudo completar la auditoría remota tras $MAX_RETRIES intentos." >&2
               exit 1
             fi
-            echo "✔ Verificación exitosa: 72 productos publicados en producción."
-          EOF
+          done
 
       - name: 8. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
-        if: ${{ github.event_name == 'push' || (github.event.inputs.admin_action == 'deploy' || github.event.inputs.admin_action == '') }}
         run: |
           # 1. Comprobar que ningún reporte Markdown esté expuesto públicamente
           STATUS_MD=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/INFORME_ACTIVACION_FASE_4B.md)
