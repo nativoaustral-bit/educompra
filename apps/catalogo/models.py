@@ -43,6 +43,31 @@ class Categoria(models.Model):
         super().save(*args, **kwargs)
 
 
+class TecnologiaCompatible(models.Model):
+    """
+    Estructura de tecnologías, plataformas o microcontroladores compatibles
+    con los componentes del catálogo (ej: Arduino, ESP32, micro:bit, Raspberry Pi).
+    """
+    nombre = models.CharField(max_length=100, unique=True, verbose_name="Tecnología Compatible")
+    slug = models.SlugField(max_length=120, unique=True, blank=True, verbose_name="Slug URL")
+    descripcion = models.CharField(max_length=255, blank=True, verbose_name="Descripción")
+    orden = models.PositiveIntegerField(default=0, verbose_name="Orden de Despliegue")
+    activa = models.BooleanField(default=True, verbose_name="Activa")
+
+    class Meta:
+        verbose_name = "Tecnología Compatible"
+        verbose_name_plural = "Tecnologías Compatibles"
+        ordering = ["orden", "nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.nombre)
+        super().save(*args, **kwargs)
+
+
 class Producto(models.Model):
     ESTADOS_STOCK = [
         ("disponible", "Disponible entrega inmediata"),
@@ -50,12 +75,34 @@ class Producto(models.Model):
         ("consultar", "Consultar disponibilidad"),
     ]
 
+    ESTADOS_CURADURIA = [
+        ("SIN_REVISAR", "Sin revisar"),
+        ("CANDIDATO", "Candidato a catálogo público"),
+        ("DESCARTADO_CATALOGO_PUBLICO", "Descartado para catálogo público (conservar en maestro)"),
+        ("EN_CURADURIA", "En proceso de curaduría pedagógica"),
+        ("VALIDADO", "Curaduría pedagógica validada"),
+        ("LISTO_PARA_PUBLICAR", "Listo para publicar"),
+    ]
+
+    ESTADOS_ESPECIFICACION_NEUTRAL = [
+        ("NO_REVISADO", "No revisado (Borrador automático)"),
+        ("BORRADOR", "En redacción técnica"),
+        ("VALIDADO_HUMM", "Validado técnicamente por Humm (Apto compra pública)"),
+    ]
+
+    NIVELES_DIFICULTAD = [
+        ("NO_DEFINIDO", "No definido"),
+        ("INICIAL", "Inicial"),
+        ("INTERMEDIO", "Intermedio"),
+        ("AVANZADO", "Avanzado"),
+    ]
+
     # Identificación Interna y Abastecimiento
     sku_humm = models.CharField(
         max_length=64,
         unique=True,
         verbose_name="SKU Humm",
-        help_text="Identificador único interno de Humm (ej: HUMM-ARD-001)."
+        help_text="Identificador único interno de Humm (ej: HUMM-KEY-KS0011)."
     )
     sku_proveedor = models.CharField(
         max_length=64,
@@ -78,13 +125,56 @@ class Producto(models.Model):
         verbose_name="Categoría"
     )
 
+    # Curaduría Pedagógica y Calidad
+    estado_curaduria = models.CharField(
+        max_length=35,
+        choices=ESTADOS_CURADURIA,
+        default="SIN_REVISAR",
+        db_index=True,
+        verbose_name="Estado de Curaduría",
+        help_text="Estado del proceso de evaluación pedagógica y selección para el catálogo público."
+    )
+    estado_especificacion_neutral = models.CharField(
+        max_length=20,
+        choices=ESTADOS_ESPECIFICACION_NEUTRAL,
+        default="NO_REVISADO",
+        db_index=True,
+        verbose_name="Estado Especificación Neutra",
+        help_text="Validación de neutralidad técnica para compra pública. Requiere VALIDADO_HUMM para emitir cotización formal."
+    )
+    nivel_dificultad = models.CharField(
+        max_length=20,
+        choices=NIVELES_DIFICULTAD,
+        default="NO_DEFINIDO",
+        verbose_name="Nivel de Dificultad / Uso",
+        help_text="Complejidad técnica del uso del componente (Inicial, Intermedio, Avanzado)."
+    )
+    tecnologias_compatibles = models.ManyToManyField(
+        TecnologiaCompatible,
+        blank=True,
+        related_name="productos",
+        verbose_name="Tecnologías Compatibles",
+        help_text="Plataformas microcontroladoras o computacionales compatibles."
+    )
+    uso_educativo = models.TextField(
+        blank=True,
+        verbose_name="Uso Educativo y Proyectos de Aula",
+        help_text="¿Qué podrían hacer o aprender los estudiantes con este producto?"
+    )
+    apto_para_kit = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Apto para Kits Educativos",
+        help_text="Indica si este producto es un componente potencial para kits temáticos de Humm."
+    )
+
     # Información Comercial (Visible para el Profesor)
     marca = models.CharField(max_length=100, default="Keyestudio", verbose_name="Marca")
     modelo = models.CharField(max_length=100, blank=True, verbose_name="Modelo")
     nombre_comercial = models.CharField(
         max_length=255,
         verbose_name="Nombre Comercial",
-        help_text="Nombre amigable presentado al docente (ej: Sensor de Humedad de Suelo Keyestudio KS0011)."
+        help_text="Nombre amigable presentado al docente (ej: Sensor de Humedad de Suelo Keyestudio para Arduino)."
     )
     nombre_original_proveedor = models.CharField(
         max_length=255,
@@ -95,7 +185,7 @@ class Producto(models.Model):
     descripcion_educativa = models.TextField(
         blank=True,
         verbose_name="Descripción Pedagógica / Educativa",
-        help_text="Texto explicativo para el profesor: aplicaciones pedagógicas, proyectos posibles con estudiantes y compatibilidad."
+        help_text="Texto explicativo para el profesor: qué es, para qué sirve y contexto de aplicación."
     )
     unidad_compra = models.CharField(max_length=50, default="unidad", verbose_name="Unidad de Medida")
 
@@ -187,6 +277,14 @@ class Producto(models.Model):
         if img and img.archivo:
             return img.archivo.url
         return "/static/img/placeholder_producto.svg"
+
+    def puede_generar_cotizacion_formal(self):
+        """
+        Regla obligatoria de Humm: Un producto solo puede emitir cotización formal
+        institucional y documentos de compra pública si su especificación técnica neutra
+        ha sido expresamente validada por Humm (estado == VALIDADO_HUMM).
+        """
+        return self.estado_especificacion_neutral == "VALIDADO_HUMM"
 
     def calcular_precios_sugeridos(self, config=None):
         """

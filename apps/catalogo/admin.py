@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Proveedor, Categoria, Producto, ProductoImagen
+from .models import Proveedor, Categoria, TecnologiaCompatible, Producto, ProductoImagen
 
 
 class TieneImagenFilter(admin.SimpleListFilter):
@@ -52,6 +52,14 @@ class CategoriaAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("nombre",)}
 
 
+@admin.register(TecnologiaCompatible)
+class TecnologiaCompatibleAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "slug", "orden", "activa")
+    list_filter = ("activa",)
+    search_fields = ("nombre",)
+    prepopulated_fields = {"slug": ("nombre",)}
+
+
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = (
@@ -60,16 +68,24 @@ class ProductoAdmin(admin.ModelAdmin):
         "sku_proveedor",
         "nombre_comercial",
         "categoria",
-        "costo_proveedor_usd",
+        "badge_curaduria",
+        "badge_especificacion_neutral",
+        "nivel_dificultad",
+        "apto_para_kit",
         "precio_sugerido_total_clp",
         "publicado",
         "activo",
     )
     list_filter = (
+        "estado_curaduria",
+        "estado_especificacion_neutral",
+        "nivel_dificultad",
+        "apto_para_kit",
         TieneImagenFilter,
+        "categoria",
+        "tecnologias_compatibles",
         "publicado",
         "activo",
-        "categoria",
         "proveedor",
         "estado_stock",
     )
@@ -78,8 +94,10 @@ class ProductoAdmin(admin.ModelAdmin):
         "sku_proveedor",
         "nombre_comercial",
         "titulo_especificacion_neutral",
+        "nombre_original_proveedor",
     )
     list_editable = ("publicado",)
+    filter_horizontal = ("tecnologias_compatibles",)
     inlines = [ProductoImagenInline]
 
     @admin.display(description="Foto")
@@ -92,21 +110,62 @@ class ProductoAdmin(admin.ModelAdmin):
             )
         return format_html('<span style="color: #aaa; font-size: 11px;">(Sin foto)</span>')
 
+    @admin.display(description="Curaduría", ordering="estado_curaduria")
+    def badge_curaduria(self, obj):
+        colores = {
+            "SIN_REVISAR": ("#64748b", "#f1f5f9"),
+            "CANDIDATO": ("#0284c7", "#e0f2fe"),
+            "DESCARTADO_CATALOGO_PUBLICO": ("#94a3b8", "#f8fafc"),
+            "EN_CURADURIA": ("#d97706", "#fef3c7"),
+            "VALIDADO": ("#059669", "#d1fae5"),
+            "LISTO_PARA_PUBLICAR": ("#7c3aed", "#ede9fe"),
+        }
+        texto = obj.get_estado_curaduria_display()
+        fg, bg = colores.get(obj.estado_curaduria, ("#475569", "#f1f5f9"))
+        return format_html(
+            '<span style="background-color: {}; color: {}; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap;">{}</span>',
+            bg, fg, texto
+        )
+
+    @admin.display(description="Espec. Neutra", ordering="estado_especificacion_neutral")
+    def badge_especificacion_neutral(self, obj):
+        colores = {
+            "NO_REVISADO": ("#dc2626", "#fee2e2", "⏳ No revisado"),
+            "BORRADOR": ("#ea580c", "#ffedd5", "📝 Borrador"),
+            "VALIDADO_HUMM": ("#16a34a", "#dcfce7", "✔ Validado Humm"),
+        }
+        fg, bg, label = colores.get(obj.estado_especificacion_neutral, ("#64748b", "#f1f5f9", obj.estado_especificacion_neutral))
+        return format_html(
+            '<span style="background-color: {}; color: {}; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap;">{}</span>',
+            bg, fg, label
+        )
+
     fieldsets = (
-        ("Identificación de Abastecimiento", {
+        ("Identificación y Trazabilidad de Abastecimiento", {
             "fields": (
                 "sku_humm",
                 "sku_proveedor",
                 "proveedor",
-                "categoria",
-            )
-        }),
-        ("Vista Profesor (Comercial y Pedagógica)", {
-            "fields": (
                 "marca",
                 "modelo",
+                "nombre_original_proveedor",
+            )
+        }),
+        ("Curaduría Pedagógica y Calidad (Humm)", {
+            "fields": (
+                "estado_curaduria",
+                "categoria",
+                "nivel_dificultad",
+                "tecnologias_compatibles",
+                "apto_para_kit",
+            ),
+            "description": "Clasificación docente y selección para el catálogo público de EduCompra."
+        }),
+        ("Vista Profesor (Comercial y Aplicación en Aula)", {
+            "fields": (
                 "nombre_comercial",
                 "descripcion_corta",
+                "uso_educativo",
                 "descripcion_educativa",
                 "unidad_compra",
             ),
@@ -114,11 +173,12 @@ class ProductoAdmin(admin.ModelAdmin):
         }),
         ("Vista Compra Pública (Especificación Técnica Neutra)", {
             "fields": (
+                "estado_especificacion_neutral",
                 "titulo_especificacion_neutral",
                 "especificacion_tecnica_neutral",
                 "criterios_equivalencia",
             ),
-            "description": "REGLA OBLIGATORIA: Sin marcas ni SKUs. Utilizada para cotizaciones institucionales y Mercado Público."
+            "description": "REGLA OBLIGATORIA: Sin marcas ni SKUs. Solo productos con estado VALIDADO_HUMM pueden emitir cotización formal."
         }),
         ("Costos y Precios Sugeridos", {
             "fields": (
@@ -128,7 +188,7 @@ class ProductoAdmin(admin.ModelAdmin):
                 "precio_sugerido_neto_clp",
                 "precio_sugerido_total_clp",
             ),
-            "description": "Precios calculados dinámicamente como sugerencia referencial."
+            "description": "Precios calculados dinámicamente según parámetros oficiales de pricing."
         }),
         ("Gestión y Disponibilidad", {
             "fields": (
@@ -142,17 +202,39 @@ class ProductoAdmin(admin.ModelAdmin):
         }),
     )
 
-    actions = ["publicar_seleccionados", "despublicar_seleccionados", "recalcular_precios"]
+    actions = [
+        "marcar_como_candidatos",
+        "descartar_de_catalogo_publico",
+        "iniciar_curaduria",
+        "marcar_apto_kit",
+        "desmarcar_apto_kit",
+        "recalcular_precios",
+    ]
 
-    @admin.action(description="Publicar productos seleccionados en EduCompra")
-    def publicar_seleccionados(self, request, queryset):
-        filas = queryset.update(publicado=True)
-        self.message_user(request, f"{filas} productos han sido publicados exitosamente.")
+    @admin.action(description="Marcar seleccionados como CANDIDATO a catálogo público")
+    def marcar_como_candidatos(self, request, queryset):
+        filas = queryset.update(estado_curaduria="CANDIDATO")
+        self.message_user(request, f"{filas} productos han sido marcados como CANDIDATO.")
 
-    @admin.action(description="Despublicar productos seleccionados")
-    def despublicar_seleccionados(self, request, queryset):
-        filas = queryset.update(publicado=False)
-        self.message_user(request, f"{filas} productos han sido despublicados.")
+    @admin.action(description="Descartar de catálogo público (conservar en catálogo maestro)")
+    def descartar_de_catalogo_publico(self, request, queryset):
+        filas = queryset.update(estado_curaduria="DESCARTADO_CATALOGO_PUBLICO")
+        self.message_user(request, f"{filas} productos han sido marcados como DESCARTADO_CATALOGO_PUBLICO.")
+
+    @admin.action(description="Iniciar proceso de curaduría pedagógica")
+    def iniciar_curaduria(self, request, queryset):
+        filas = queryset.update(estado_curaduria="EN_CURADURIA")
+        self.message_user(request, f"{filas} productos han pasado a EN_CURADURIA.")
+
+    @admin.action(description="Marcar como APTO PARA KIT educativo")
+    def marcar_apto_kit(self, request, queryset):
+        filas = queryset.update(apto_para_kit=True)
+        self.message_user(request, f"{filas} productos marcados como aptos para kits.")
+
+    @admin.action(description="Desmarcar aptitud para kits")
+    def desmarcar_apto_kit(self, request, queryset):
+        filas = queryset.update(apto_para_kit=False)
+        self.message_user(request, f"{filas} productos desmarcados de kits.")
 
     @admin.action(description="Recalcular precios sugeridos con parámetros vigentes")
     def recalcular_precios(self, request, queryset):
