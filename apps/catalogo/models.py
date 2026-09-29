@@ -68,7 +68,23 @@ class TecnologiaCompatible(models.Model):
         super().save(*args, **kwargs)
 
 
+class ProductoQuerySet(models.QuerySet):
+    def publicables(self, user=None):
+        """
+        Regla única de visibilidad centralizada para EduCompra Humm.
+        - Para público general: activo=True, estado_curaduria='VALIDADO', publicado=True.
+        - Para administradores staff autenticados (Modo Preview seguro de Fase 4A):
+          permite previsualizar en producción los productos curados (VALIDADO) antes del lanzamiento oficial.
+        """
+        qs = self.filter(activo=True, estado_curaduria="VALIDADO")
+        if user and user.is_authenticated and user.is_staff:
+            return qs
+        return qs.filter(publicado=True)
+
+
 class Producto(models.Model):
+    objects = ProductoQuerySet.as_manager()
+
     ESTADOS_STOCK = [
         ("disponible", "Disponible entrega inmediata"),
         ("importacion", "A pedido / Importación (15-20 días)"),
@@ -98,6 +114,15 @@ class Producto(models.Model):
     ]
 
     # Identificación Interna y Abastecimiento
+    slug = models.SlugField(
+        max_length=150,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Slug URL",
+        help_text="Identificador semántico para URL amigable del catálogo."
+    )
     sku_humm = models.CharField(
         max_length=64,
         unique=True,
@@ -354,6 +379,13 @@ class Producto(models.Model):
         self.precio_sugerido_total_clp = precio_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(Decimal("1.00"))
 
     def save(self, *args, **kwargs):
+        # Asegurar slug semántico único si no existe
+        if not self.slug:
+            base = slugify(f"{self.sku_proveedor}-{self.nombre_comercial}")[:145]
+            if not base:
+                base = slugify(self.sku_humm)[:145]
+            self.slug = base
+
         # Asegurar cálculo de precios sugeridos al guardar si hay costo
         if self.costo_proveedor_usd > 0:
             self.calcular_precios_sugeridos()

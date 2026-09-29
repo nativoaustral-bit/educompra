@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Mi Lista de Cotización — EduCompra Humm{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 24px;">
+  <h1 style="font-size: 1.8rem; font-weight: 800; margin: 0 0 6px 0;">Mi Lista de Cotización</h1>
+  <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+    Revisa las cantidades y productos seleccionados para tu establecimiento educacional.
+  </p>
+</div>
+
+{% if items %}
+  <div class="cotizacion-page-layout">
+    <!-- Lista de Productos en Canasta -->
+    <div class="cart-items-card">
+      <table class="cart-table" aria-label="Tabla de productos para cotizar">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Precio Ref. Unitario</th>
+            <th style="text-align: center;">Cantidad</th>
+            <th style="text-align: right;">Subtotal Ref.</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>
+                <div class="cart-item-product">
+                  {% if item.producto.imagenes.first %}
+                    <img src="{{ item.producto.imagen_principal_url }}" alt="{{ item.producto.nombre_comercial }}" class="cart-item-thumb">
+                  {% else %}
+                    <div class="cart-item-thumb" style="display:flex; align-items:center; justify-content:center; font-size:1.5rem;">📦</div>
+                  {% endif %}
+                  <div class="cart-item-details">
+                    <strong>
+                      <a href="{% url 'catalogo:detalle' item.producto.slug %}">{{ item.producto.nombre_comercial }}</a>
+                    </strong>
+                    <span class="cart-item-unit">
+                      Presentación: <strong>{{ item.unidad }}</strong> • SKU: {{ item.producto.sku_humm }}
+                    </span>
+                    {% if item.desglose_unidades %}
+                      <div style="font-size: 0.82rem; color: #0369a1; font-weight: 600; margin-top: 3px;">
+                        📦 Cantidad solicitada: {{ item.desglose_unidades }}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+
+              <td style="white-space: nowrap; font-weight: 600; color: #334155;">
+                ${{ item.precio_unitario|floatformat:"0" }}
+                <div style="font-size: 0.72rem; color: #64748b;">IVA incluido</div>
+              </td>
+
+              <td style="text-align: center;">
+                <form action="{% url 'canasta_actualizar' %}" method="POST" class="cart-qty-form" style="justify-content:center;">
+                  {% csrf_token %}
+                  <input type="hidden" name="producto_id" value="{{ item.producto.id }}">
+                  <input
+                    type="number"
+                    name="cantidad"
+                    value="{{ item.cantidad }}"
+                    min="1"
+                    max="500"
+                    class="cart-qty-input"
+                    aria-label="Cantidad para {{ item.producto.nombre_comercial }}"
+                  >
+                  <button type="submit" class="btn-update-qty" title="Actualizar cantidad">Actualizar</button>
+                </form>
+              </td>
+
+              <td style="text-align: right; white-space: nowrap; font-weight: 800; font-size: 1.05rem; color: #0f172a;">
+                ${{ item.subtotal|floatformat:"0" }}
+              </td>
+
+              <td style="text-align: right;">
+                <form action="{% url 'canasta_eliminar' %}" method="POST" style="display:inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="producto_id" value="{{ item.producto.id }}">
+                  <button type="submit" class="btn-delete-item" title="Eliminar producto">✕ Quitar</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0;">
+        <a href="{% url 'catalogo:lista' %}" style="font-weight:600; font-size:0.9rem;">
+          ← Seguir agregando productos
+        </a>
+
+        <form action="{% url 'canasta_vaciar' %}" method="POST" onsubmit="return confirm('¿Seguro que deseas vaciar toda tu lista de cotización?');">
+          {% csrf_token %}
+          <button type="submit" style="background:none; border:none; color:#dc2626; font-size:0.85rem; cursor:pointer;">
+            Vaciar lista completa
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Resumen y CTA -->
+    <aside class="cart-summary-card">
+      <h3>Resumen Estimado</h3>
+
+      <div class="summary-row">
+        <span>Total de artículos:</span>
+        <strong>{{ total_articulos }}</strong>
+      </div>
+
+      <div class="summary-row total-row">
+        <span>Total referencial:</span>
+        <span>${{ total_referencial|floatformat:"0" }}</span>
+      </div>
+
+      <div style="font-size:0.75rem; color:#64748b; margin-top:-8px; margin-bottom:16px;">
+        Valores con IVA incluido.
+      </div>
+
+      <a href="{% url 'solicitar_cotizacion' %}" class="btn-proceed-checkout">
+        Solicitar Cotización Formal →
+      </a>
+
+      <div style="margin-top:20px; padding:12px; background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; font-size:0.78rem; color:#92400e; line-height:1.4;">
+        <strong>Presupuesto escolar:</strong> {{ disclaimer_precios }}
+      </div>
+    </aside>
+  </div>
+
+{% else %}
+  <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:60px 24px; text-align:center; max-width:600px; margin:40px auto;">
+    <div style="font-size: 3.5rem; margin-bottom: 16px;">📋</div>
+    <h2 style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin: 0 0 8px 0;">Tu lista de cotización está vacía</h2>
+    <p style="color: #64748b; font-size: 0.95rem; margin: 0 0 24px 0;">
+      Aún no has agregado productos. Explora nuestro catálogo y selecciona los módulos, sensores y kits que necesitas para tu colegio.
+    </p>
+    <a href="{% url 'catalogo:lista' %}" class="btn-proceed-checkout" style="display:inline-block; width:auto; padding:12px 28px;">
+      Explorar Catálogo Pedagógico
+    </a>
+  </div>
+{% endif %}
+{% endblock %}

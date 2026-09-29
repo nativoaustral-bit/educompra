@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Solicitar Cotización Escolar — EduCompra Humm{% endblock %}
+
+{% block extra_head %}
+<script>
+  // Inyección de 16 regiones y comunas oficiales desde fuente local controlada
+  window.EDUCOMPRA_REGIONES = {{ regiones_json|safe }};
+</script>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 24px;">
+  <a href="{% url 'mi_cotizacion' %}" style="font-size:0.88rem; color:#64748b; font-weight:500;">← Volver a Mi Lista</a>
+  <h1 style="font-size: 1.8rem; font-weight: 800; margin: 8px 0 6px 0;">Solicitar Cotización Formal</h1>
+  <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+    Completa los datos de tu colegio o institución para emitir una cotización con especificaciones técnicas neutras.
+  </p>
+</div>
+
+<div class="form-grid-layout">
+  <!-- Formulario -->
+  <div class="form-card">
+    <form action="{% url 'solicitar_cotizacion' %}" method="POST" novalidate>
+      {% csrf_token %}
+      {{ form.idempotency_token }}
+      {{ form.sitio_web_docente }}
+
+      {% if form.non_field_errors %}
+        <div class="alert-box alert-error" style="margin-bottom:20px;">
+          {% for err in form.non_field_errors %}
+            <div>{{ err }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <!-- Sección 1: Datos del Solicitante -->
+      <h2 class="form-section-title">1. Datos del Profesor(a) o Solicitante</h2>
+
+      <div class="form-group">
+        <label for="{{ form.nombre_solicitante.id_for_label }}" class="form-label">
+          {{ form.nombre_solicitante.label }} <span style="color:#dc2626;">*</span>
+        </label>
+        {{ form.nombre_solicitante }}
+        {% if form.nombre_solicitante.errors %}
+          <div class="form-error">{{ form.nombre_solicitante.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div class="form-group">
+          <label for="{{ form.email.id_for_label }}" class="form-label">
+            {{ form.email.label }} <span style="color:#dc2626;">*</span>
+          </label>
+          {{ form.email }}
+          {% if form.email.errors %}
+            <div class="form-error">{{ form.email.errors.0 }}</div>
+          {% endif %}
+          <div class="form-help">Aquí recibirás la cotización y respaldo en PDF.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.telefono.id_for_label }}" class="form-label">
+            {{ form.telefono.label }} <span style="color:#dc2626;">*</span>
+          </label>
+          {{ form.telefono }}
+          {% if form.telefono.errors %}
+            <div class="form-error">{{ form.telefono.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.cargo_solicitante.id_for_label }}" class="form-label">
+          {{ form.cargo_solicitante.label }}
+        </label>
+        {{ form.cargo_solicitante }}
+        {% if form.cargo_solicitante.errors %}
+          <div class="form-error">{{ form.cargo_solicitante.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Sección 2: Datos del Establecimiento -->
+      <h2 class="form-section-title">2. Establecimiento y Ubicación</h2>
+
+      <div class="form-group">
+        <label for="{{ form.establecimiento.id_for_label }}" class="form-label">
+          {{ form.establecimiento.label }} <span style="color:#dc2626;">*</span>
+        </label>
+        {{ form.establecimiento }}
+        {% if form.establecimiento.errors %}
+          <div class="form-error">{{ form.establecimiento.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.tipo_institucion.id_for_label }}" class="form-label">
+          {{ form.tipo_institucion.label }}
+        </label>
+        {{ form.tipo_institucion }}
+        {% if form.tipo_institucion.errors %}
+          <div class="form-error">{{ form.tipo_institucion.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div class="form-group">
+          <label for="id_region" class="form-label">
+            {{ form.region.label }} <span style="color:#dc2626;">*</span>
+          </label>
+          {{ form.region }}
+          {% if form.region.errors %}
+            <div class="form-error">{{ form.region.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="id_comuna" class="form-label">
+            {{ form.comuna.label }} <span style="color:#dc2626;">*</span>
+          </label>
+          {{ form.comuna }}
+          {% if form.comuna.errors %}
+            <div class="form-error">{{ form.comuna.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Sección 3: Antecedentes del Proyecto (Opcional) -->
+      <h2 class="form-section-title">3. Finalidad del Proyecto Escolar (Opcional)</h2>
+
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:16px;">
+        <div class="form-group">
+          <label for="{{ form.proyecto_educativo.id_for_label }}" class="form-label">
+            {{ form.proyecto_educativo.label }}
+          </label>
+          {{ form.proyecto_educativo }}
+          {% if form.proyecto_educativo.errors %}
+            <div class="form-error">{{ form.proyecto_educativo.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.fecha_requerida_aproximada.id_for_label }}" class="form-label">
+            {{ form.fecha_requerida_aproximada.label }}
+          </label>
+          {{ form.fecha_requerida_aproximada }}
+          {% if form.fecha_requerida_aproximada.errors %}
+            <div class="form-error">{{ form.fecha_requerida_aproximada.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Sección 4: Datos Institucionales de Compra (Opcional) -->
+      <h2 class="form-section-title">4. Datos para Gestión de Compra Pública (Opcional)</h2>
+      <p style="font-size:0.85rem; color:#64748b; margin-top:-8px; margin-bottom:14px;">
+        Si tu colegio compra a través de DAEM, Corporación Municipal o Sostenedor, puedes ingresar estos datos para agilizar el contacto administrativo.
+      </p>
+
+      <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:16px;">
+        <div class="form-group">
+          <label for="{{ form.institucion_responsable_compra.id_for_label }}" class="form-label">
+            {{ form.institucion_responsable_compra.label }}
+          </label>
+          {{ form.institucion_responsable_compra }}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.rut_institucion.id_for_label }}" class="form-label">
+            {{ form.rut_institucion.label }}
+          </label>
+          {{ form.rut_institucion }}
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div class="form-group">
+          <label for="{{ form.nombre_encargado_compras.id_for_label }}" class="form-label">
+            {{ form.nombre_encargado_compras.label }}
+          </label>
+          {{ form.nombre_encargado_compras }}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.email_encargado_compras.id_for_label }}" class="form-label">
+            {{ form.email_encargado_compras.label }}
+          </label>
+          {{ form.email_encargado_compras }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.observaciones.id_for_label }}" class="form-label">
+          {{ form.observaciones.label }}
+        </label>
+        {{ form.observaciones }}
+      </div>
+
+      <button type="submit" class="btn-submit-solicitud">
+        Enviar Solicitud de Cotización →
+      </button>
+
+      <p style="font-size:0.8rem; color:#64748b; text-align:center; margin-top:14px;">
+        🔒 Envío protegido contra duplicación. No se requiere tarjeta ni pago previo.
+      </p>
+    </form>
+  </div>
+
+  <!-- Resumen Lateral -->
+  <aside class="cart-summary-card">
+    <h3>Productos a Cotizar ({{ total_articulos }})</h3>
+
+    <div style="max-height: 280px; overflow-y: auto; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
+      {% for item in items %}
+        <div style="padding: 8px 0; border-bottom: 1px dashed #f1f5f9; font-size: 0.88rem;">
+          <div style="font-weight: 600; color: #0f172a;">{{ item.producto.nombre_comercial }}</div>
+          <div style="display:flex; justify-content:space-between; color:#64748b; font-size:0.8rem; margin-top:2px;">
+            <span>{{ item.cantidad }} × {{ item.unidad }}</span>
+            <span style="font-weight:700; color:#334155;">${{ item.subtotal|floatformat:"0" }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="summary-row total-row" style="margin-top:0;">
+      <span>Total referencial:</span>
+      <span>${{ total_referencial|floatformat:"0" }}</span>
+    </div>
+
+    <div style="font-size:0.75rem; color:#64748b; margin-top:-8px; margin-bottom:16px;">
+      Valores en pesos chilenos con IVA incluido.
+    </div>
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; font-size:0.8rem; color:#475569; line-height:1.4;">
+      <strong>¿Qué ocurre después?</strong><br>
+      El equipo técnico de Humm revisará la disponibilidad de los componentes y emitirá una cotización formal dentro de 24 a 48 horas hábiles.
+    </div>
+  </aside>
+</div>
+{% endblock %}

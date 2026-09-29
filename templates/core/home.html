@@ -1,28 +1,128 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block title %}EduCompra Humm — Tecnología para Educación Escolar{% endblock %}
 
 {% block content %}
-<section class="hero-card">
-  <span class="hero-tag">Fase 1 — Base Funcional e Infraestructura</span>
-  <h1 class="hero-title">Tecnología para llevar tus proyectos educativos a la realidad</h1>
-  <p class="hero-subtitle">
-    EduCompra facilita a profesores y establecimientos educacionales la selección de componentes tecnológicos (Arduino, robótica, sensores e IoT) y prepara automáticamente los antecedentes técnicos y presupuestarios para procesos de compra pública.
-  </p>
+<section class="hero-section">
+  <div class="hero-content">
+    <span class="hero-badge">Tecnología Educativa para Colegios de Chile</span>
+    <h1 class="hero-title">Componentes, kits y robótica para tus proyectos escolares</h1>
+    <p class="hero-subtitle">
+      Selecciona microcontroladores, sensores y módulos con precios referenciales claros. Preparamos las especificaciones técnicas neutras para tus postulaciones a fondos SEP, FAEP o compras en Mercado Público.
+    </p>
 
-  <div class="status-grid">
-    <div class="status-card">
-      <h3><span>⚙️</span> Base Funcional <span class="badge-ok">Activa</span></h3>
-      <p>Entorno Django 5.2 LTS configurado, base de datos relacional y panel administrativo seguro integrado.</p>
-    </div>
-
-    <div class="status-card">
-      <h3><span>📋</span> Neutralidad Documental <span class="badge-ok">Regla Activa</span></h3>
-      <p>Separación estricta entre la vista comercial del profesor y las especificaciones técnicas neutras para compras públicas.</p>
-    </div>
-
-    <div class="status-card">
-      <h3><span>🔒</span> Snapshots Inmutables <span class="badge-ok">Protegido</span></h3>
-      <p>Preservación histórica inalterable de cada cotización ante modificaciones futuras del catálogo.</p>
-    </div>
+    <form action="{% url 'catalogo:lista' %}" method="GET" class="hero-search-box" role="search">
+      <input
+        type="search"
+        name="q"
+        placeholder="Busca por nombre, sensor, tecnología (ej: Arduino, servomotor, ESP32)..."
+        class="hero-search-input"
+        required
+      >
+      <button type="submit" class="hero-search-btn">Buscar en Catálogo</button>
+    </form>
   </div>
 </section>
+
+{% if categorias %}
+  <section class="home-categories-section">
+    <h2 class="home-section-title">Explorar por Categoría Pedagógica</h2>
+    <div class="categories-chips-grid">
+      {% for cat in categorias %}
+        <a href="{% url 'catalogo:lista' %}?categoria={{ cat.slug }}" class="category-chip">
+          {{ cat.nombre }}
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+<section class="featured-products-section">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2 class="home-section-title" style="margin-bottom:0;">Productos Destacados</h2>
+    <a href="{% url 'catalogo:lista' %}" style="font-weight:600; font-size:0.95rem;">Ver todo el catálogo →</a>
+  </div>
+
+  {% if productos_destacados %}
+    <div class="products-grid">
+      {% for prod in productos_destacados %}
+        <article class="product-card">
+          <div class="product-image-container">
+            {% if prod.destacado %}
+              <span class="badge-destacado-card">Destacado</span>
+            {% endif %}
+            {% if prod.imagenes.first %}
+              <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" class="product-img" loading="lazy">
+            {% else %}
+              <div class="product-img-placeholder">📦</div>
+            {% endif %}
+          </div>
+
+          <div class="product-info">
+            <span class="product-category-tag">{{ prod.categoria.nombre|default:"Sin clasificar" }}</span>
+            <h3 class="product-title">
+              <a href="{% url 'catalogo:detalle' prod.slug %}">{{ prod.nombre_comercial }}</a>
+            </h3>
+
+            <span class="product-unit-badge">
+              Venta: {{ prod.unidad_compra|default:"1 unidad" }}
+            </span>
+
+            <div class="product-bottom-row">
+              <div class="price-block">
+                <span class="price-label">Precio ref. con IVA</span>
+                <span class="price-value">${{ prod.precio_sugerido_total_clp|floatformat:"0" }}</span>
+                <span class="price-unit-sub">por {{ prod.unidad_compra|default:"unidad" }}</span>
+              </div>
+
+              <form action="{% url 'canasta_agregar' %}" method="POST" class="ajax-add-cart">
+                {% csrf_token %}
+                <input type="hidden" name="producto_id" value="{{ prod.id }}">
+                <input type="hidden" name="cantidad" value="1">
+                <button type="submit" class="btn-add-cart-card" title="Agregar a Mi Cotización">
+                  + Cotizar
+                </button>
+              </form>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:32px; text-align:center;">
+      <p style="color:#64748b; margin:0;">
+        {% if es_preview_staff %}
+          Actualmente no hay productos validados marcados como destacados.
+        {% else %}
+          El catálogo público se encuentra en proceso de habilitación oficial.
+        {% endif %}
+      </p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="features-banner-grid">
+  <div class="feature-box">
+    <div class="feature-icon">🔍</div>
+    <h3>1. Explora y Selecciona</h3>
+    <p>Navega componentes evaluados pedagógicamente. Añade a tu lista la cantidad exacta que requieres para tus cursos o talleres.</p>
+  </div>
+
+  <div class="feature-box">
+    <div class="feature-icon">📑</div>
+    <h3>2. Solicita tu Presupuesto</h3>
+    <p>Envía tu lista indicando tu colegio y región. Sin registro obligatorio ni pagos en línea, adaptado a los tiempos escolares.</p>
+  </div>
+
+  <div class="feature-box">
+    <div class="feature-icon">🏛️</div>
+    <h3>3. Formaliza con Humm</h3>
+    <p>Recibe una cotización formal válida para adquisiciones directas, fondos SEP o licitaciones públicas en Mercado Público.</p>
+  </div>
+</section>
+
+<div style="margin-top: 36px; padding: 14px 18px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; font-size: 0.82rem; color: #92400e;">
+  <strong>Nota de Transparencia de Precios:</strong> {{ disclaimer_precios }}
+</div>
 {% endblock %}

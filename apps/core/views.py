@@ -1,6 +1,11 @@
+"""
+Vistas principales de EduCompra Humm: Portada y comprobación de salud.
+"""
+
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.db import connection
+from apps.catalogo.models import Producto, Categoria
 
 def health_check(request):
     """
@@ -23,12 +28,32 @@ def health_check(request):
     }
     return JsonResponse(payload, status=status_code)
 
+
 def home_view(request):
     """
-    Portada inicial limpia de EduCompra Humm para la Fase 1.
+    Portada de EduCompra Humm con buscador principal, categorías destacadas y productos curados.
     """
+    publicables_qs = Producto.objects.publicables(user=request.user)
+    
+    # Productos destacados
+    productos_destacados = publicables_qs.filter(destacado=True)[:8]
+    if not productos_destacados.exists():
+        productos_destacados = publicables_qs[:8]
+
+    # Categorías activas que tienen productos
+    publicables_ids = publicables_qs.values_list("id", flat=True)
+    categorias = Categoria.objects.filter(
+        productos__id__in=publicables_ids,
+        activa=True
+    ).distinct().order_by("orden", "nombre")
+
+    es_preview_staff = request.user.is_authenticated and request.user.is_staff
+
     context = {
-        "titulo": "EduCompra Humm — Tecnología Educativa",
-        "fase": "Fase 1 — Base Funcional e Infraestructura",
+        "productos_destacados": productos_destacados,
+        "categorias": categorias,
+        "total_catalogo": publicables_qs.count(),
+        "es_preview_staff": es_preview_staff,
+        "disclaimer_precios": "Precios referenciales en pesos chilenos con IVA incluido para fines de presupuesto y postulación a fondos. La cotización formal final será emitida por Humm confirmando disponibilidad y costos logísticos."
     }
     return render(request, "core/home.html", context)

@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Catálogo de Componentes Tecnológicos — EduCompra Humm{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 24px;">
+  <h1 style="font-size: 1.8rem; font-weight: 800; margin: 0 0 6px 0;">Catálogo Pedagógico EduCompra</h1>
+  <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+    Componentes y kits seleccionados para educación en robótica, electrónica, programación y ciencias.
+  </p>
+</div>
+
+<div class="catalogo-layout">
+  <!-- Barra lateral de filtros -->
+  <aside class="filters-sidebar">
+    <div class="filters-header">
+      <h2>Filtros</h2>
+      {% if categoria_activa or tecnologia_activa or dificultad_activa or q %}
+        <a href="{% url 'catalogo:lista' %}" class="btn-clear-filters">Limpiar filtros</a>
+      {% endif %}
+    </div>
+
+    <!-- Buscador dentro del catálogo -->
+    <div class="filter-group">
+      <h3>Buscar</h3>
+      <form action="{% url 'catalogo:lista' %}" method="GET">
+        {% if categoria_activa %}
+          <input type="hidden" name="categoria" value="{{ categoria_activa.slug }}">
+        {% endif %}
+        {% if tecnologia_activa %}
+          <input type="hidden" name="tecnologia" value="{{ tecnologia_activa.slug }}">
+        {% endif %}
+        {% if dificultad_activa %}
+          <input type="hidden" name="dificultad" value="{{ dificultad_activa }}">
+        {% endif %}
+        <input
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="Término o código..."
+          class="form-control"
+          style="padding: 8px 10px; font-size: 0.88rem;"
+        >
+      </form>
+    </div>
+
+    <!-- Filtro por Categorías -->
+    {% if categorias %}
+      <div class="filter-group">
+        <h3>Categoría</h3>
+        <ul class="filter-list">
+          <li>
+            <a href="{% url 'catalogo:lista' %}{% if q %}?q={{ q }}{% endif %}" class="filter-link {% if not categoria_activa %}active{% endif %}">
+              <span>Todas</span>
+            </a>
+          </li>
+          {% for cat in categorias %}
+            <li>
+              <a
+                href="{% url 'catalogo:lista' %}?categoria={{ cat.slug }}{% if q %}&q={{ q }}{% endif %}{% if tecnologia_activa %}&tecnologia={{ tecnologia_activa.slug }}{% endif %}"
+                class="filter-link {% if categoria_activa.slug == cat.slug %}active{% endif %}"
+              >
+                <span>{{ cat.nombre }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- Filtro por Tecnologías Compatibles -->
+    {% if tecnologias %}
+      <div class="filter-group">
+        <h3>Tecnología Compatible</h3>
+        <ul class="filter-list">
+          {% for tec in tecnologias %}
+            <li>
+              <a
+                href="{% url 'catalogo:lista' %}?tecnologia={{ tec.slug }}{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+                class="filter-link {% if tecnologia_activa.slug == tec.slug %}active{% endif %}"
+              >
+                <span>{{ tec.nombre }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- Filtro por Nivel de Uso / Complejidad -->
+    <div class="filter-group">
+      <h3>Nivel de Uso / Complejidad</h3>
+      <ul class="filter-list">
+        <li>
+          <a
+            href="{% url 'catalogo:lista' %}?dificultad=INICIAL{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+            class="filter-link {% if dificultad_activa == 'INICIAL' %}active{% endif %}"
+          >
+            <span>Inicial</span>
+          </a>
+        </li>
+        <li>
+          <a
+            href="{% url 'catalogo:lista' %}?dificultad=INTERMEDIO{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+            class="filter-link {% if dificultad_activa == 'INTERMEDIO' %}active{% endif %}"
+          >
+            <span>Intermedio</span>
+          </a>
+        </li>
+        <li>
+          <a
+            href="{% url 'catalogo:lista' %}?dificultad=AVANZADO{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+            class="filter-link {% if dificultad_activa == 'AVANZADO' %}active{% endif %}"
+          >
+            <span>Avanzado</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Área principal de productos -->
+  <section class="catalogo-main">
+    <div class="catalogo-top-bar">
+      <div class="results-count">
+        <strong>{{ total_encontrados }}</strong> producto{{ total_encontrados|pluralize }} encontrado{{ total_encontrados|pluralize }}
+        {% if q %}para "<em>{{ q }}</em>"{% endif %}
+      </div>
+
+      <div class="sort-select-wrapper">
+        <label for="sort-select">Ordenar por:</label>
+        <select
+          id="sort-select"
+          class="select-control"
+          onchange="location = this.value;"
+        >
+          <option value="{% url 'catalogo:lista' %}?orden=destacados{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}" {% if orden == 'destacados' %}selected{% endif %}>
+            Destacados
+          </option>
+          <option value="{% url 'catalogo:lista' %}?orden=precio_asc{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}" {% if orden == 'precio_asc' %}selected{% endif %}>
+            Menor Precio
+          </option>
+          <option value="{% url 'catalogo:lista' %}?orden=precio_desc{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}" {% if orden == 'precio_desc' %}selected{% endif %}>
+            Mayor Precio
+          </option>
+          <option value="{% url 'catalogo:lista' %}?orden=nombre{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}" {% if orden == 'nombre' %}selected{% endif %}>
+            Nombre (A-Z)
+          </option>
+        </select>
+      </div>
+    </div>
+
+    {% if page_obj %}
+      <div class="products-grid">
+        {% for prod in page_obj %}
+          <article class="product-card">
+            <div class="product-image-container">
+              {% if prod.destacado %}
+                <span class="badge-destacado-card">Destacado</span>
+              {% endif %}
+              {% if prod.imagenes.first %}
+                <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" class="product-img" loading="lazy">
+              {% else %}
+                <div class="product-img-placeholder">📦</div>
+              {% endif %}
+            </div>
+
+            <div class="product-info">
+              <span class="product-category-tag">{{ prod.categoria.nombre|default:"Tecnología Educativa" }}</span>
+              <h3 class="product-title">
+                <a href="{% url 'catalogo:detalle' prod.slug %}">{{ prod.nombre_comercial }}</a>
+              </h3>
+
+              <span class="product-unit-badge">
+                Venta: {{ prod.unidad_compra|default:"1 unidad" }}
+              </span>
+
+              <div class="product-bottom-row">
+                <div class="price-block">
+                  <span class="price-label">Precio ref. con IVA</span>
+                  <span class="price-value">${{ prod.precio_sugerido_total_clp|floatformat:"0" }}</span>
+                  <span class="price-unit-sub">por {{ prod.unidad_compra|default:"unidad" }}</span>
+                </div>
+
+                <form action="{% url 'canasta_agregar' %}" method="POST" class="ajax-add-cart">
+                  {% csrf_token %}
+                  <input type="hidden" name="producto_id" value="{{ prod.id }}">
+                  <input type="hidden" name="cantidad" value="1">
+                  <button type="submit" class="btn-add-cart-card" title="Agregar a Mi Cotización">
+                    + Cotizar
+                  </button>
+                </form>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      <!-- Paginación -->
+      {% if page_obj.has_other_pages %}
+        <div style="display:flex; justify-content:center; gap:8px; margin-top:36px;">
+          {% if page_obj.has_previous %}
+            <a
+              href="?page={{ page_obj.previous_page_number }}{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if orden %}&orden={{ orden }}{% endif %}"
+              class="btn-admin"
+            >
+              ← Anterior
+            </a>
+          {% endif %}
+
+          <span style="display:flex; align-items:center; padding:0 12px; font-size:0.9rem; color:#64748b;">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+          </span>
+
+          {% if page_obj.has_next %}
+            <a
+              href="?page={{ page_obj.next_page_number }}{% if categoria_activa %}&categoria={{ categoria_activa.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if orden %}&orden={{ orden }}{% endif %}"
+              class="btn-admin"
+            >
+              Siguiente →
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+    {% else %}
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:48px 24px; text-align:center;">
+        <h3 style="font-size:1.2rem; color:#0f172a; margin:0 0 8px 0;">No se encontraron productos</h3>
+        <p style="color:#64748b; font-size:0.95rem; margin:0 0 18px 0;">
+          {% if es_preview_staff %}
+            No hay productos curados que coincidan con los filtros seleccionados.
+          {% else %}
+            El catálogo público de 72 productos se encuentra en etapa de validación y aún no ha sido activado públicamente.
+          {% endif %}
+        </p>
+        <a href="{% url 'catalogo:lista' %}" class="btn-canasta">Ver catálogo completo</a>
+      </div>
+    {% endif %}
+
+    <div style="margin-top: 36px; padding: 14px 18px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; font-size: 0.82rem; color: #92400e;">
+      <strong>Nota sobre valores publicados:</strong> {{ disclaimer_precios }}
+    </div>
+  </section>
+</div>
+{% endblock %}

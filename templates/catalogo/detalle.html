@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ producto.nombre_comercial }} — EduCompra Humm{% endblock %}
+{% block meta_description %}{{ producto.descripcion_corta|default:producto.nombre_comercial }}{% endblock %}
+
+{% block content %}
+<nav aria-label="Migas de pan" style="margin-bottom: 20px; font-size: 0.88rem; color: #64748b;">
+  <a href="{% url 'core:home' %}">Inicio</a> &gt;
+  <a href="{% url 'catalogo:lista' %}">Catálogo</a> &gt;
+  {% if producto.categoria %}
+    <a href="{% url 'catalogo:lista' %}?categoria={{ producto.categoria.slug }}">{{ producto.categoria.nombre }}</a> &gt;
+  {% endif %}
+  <span style="color: #0f172a; font-weight: 500;">{{ producto.nombre_comercial }}</span>
+</nav>
+
+<div class="product-detail-layout">
+  <!-- Galería / Imagen -->
+  <div class="detail-gallery">
+    <div class="main-image-wrapper">
+      {% if producto.imagenes.first %}
+        <img src="{{ producto.imagen_principal_url }}" alt="{{ producto.nombre_comercial }}" class="detail-main-img">
+      {% else %}
+        <div style="font-size: 5rem; color: #94a3b8;">📦</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Información Comercial y Pedagógica -->
+  <div class="detail-info">
+    <div class="detail-sku-row">
+      <span>SKU Humm: <strong>{{ producto.sku_humm }}</strong></span>
+      <span>•</span>
+      <span>Cód. Ref: <strong>{{ producto.sku_proveedor }}</strong></span>
+      {% if producto.marca %}
+        <span>•</span>
+        <span>Marca: <strong>{{ producto.marca }}</strong></span>
+      {% endif %}
+    </div>
+
+    <h1 class="detail-title">{{ producto.nombre_comercial }}</h1>
+
+    <div class="detail-badges-row">
+      {% if producto.categoria %}
+        <span class="badge-category">{{ producto.categoria.nombre }}</span>
+      {% endif %}
+      {% if producto.nivel_dificultad != "NO_DEFINIDO" %}
+        <span class="badge-category">Nivel: {{ producto.get_nivel_dificultad_display }}</span>
+      {% endif %}
+      {% for tec in producto.tecnologias_compatibles.all %}
+        <span class="badge-tech">{{ tec.nombre }}</span>
+      {% endfor %}
+    </div>
+
+    <!-- Unidad Comercial Explicada -->
+    <div class="detail-unit-alert">
+      <strong>Presentación de Venta: {{ producto.unidad_compra|default:"1 unidad" }}</strong>
+      <p>
+        El precio referencial y las cantidades calculadas aplican a la <em>unidad comercial completa</em> (ej: pack, set o módulo individual).
+      </p>
+    </div>
+
+    <!-- Caja de Precio Referencial con IVA (Sin desglose interno) -->
+    <div class="detail-price-box">
+      <div class="detail-price-main">
+        ${{ producto.precio_sugerido_total_clp|floatformat:"0" }}
+      </div>
+      <div class="detail-price-legend">
+        Precio referencial con IVA incluido (por {{ producto.unidad_compra|default:"unidad" }})
+      </div>
+    </div>
+
+    <!-- Formulario Agregar a Mi Cotización -->
+    <form action="{% url 'canasta_agregar' %}" method="POST" class="ajax-add-cart detail-action-form">
+      {% csrf_token %}
+      <input type="hidden" name="producto_id" value="{{ producto.id }}">
+      <label for="cant-input" style="font-weight:600; font-size:0.9rem;">Cantidad:</label>
+      <input
+        type="number"
+        id="cant-input"
+        name="cantidad"
+        value="1"
+        min="1"
+        max="500"
+        class="quantity-input"
+        required
+      >
+      <button type="submit" class="btn-add-cart-large">
+        + Agregar a mi cotización
+      </button>
+    </form>
+
+    <!-- Disclaimer obligatorio -->
+    <div class="disclaimer-box">
+      <strong>Aviso de presupuesto escolar:</strong> {{ disclaimer_precios }}
+    </div>
+
+    <!-- Descripción Pedagógica y de Aplicación -->
+    <div class="detail-description-section">
+      <h3>Propósito y Aplicación Educativa</h3>
+      {% if producto.descripcion_educativa or producto.descripcion_corta %}
+        <p>{{ producto.descripcion_educativa|default:producto.descripcion_corta }}</p>
+      {% endif %}
+
+      {% if producto.uso_educativo %}
+        <div style="margin-top:14px;">
+          <strong style="font-size:0.85rem; color:#475569;">Aplicación en aula y proyectos:</strong>
+          <p style="margin:4px 0 0 0; font-size:0.9rem; color:#0f172a;">{{ producto.uso_educativo }}</p>
+        </div>
+      {% endif %}
+
+      {% if producto.advertencia_uso %}
+        <div style="margin-top:16px; padding:10px 14px; background:#fef2f2; border:1px solid #fee2e2; border-radius:6px; font-size:0.82rem; color:#991b1b;">
+          <strong>Recomendaciones y advertencias de uso:</strong> {{ producto.advertencia_uso }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if relacionados %}
+  <section style="margin-top: 48px;">
+    <h2 class="home-section-title">Componentes relacionados en {{ producto.categoria.nombre }}</h2>
+    <div class="products-grid">
+      {% for rel in relacionados %}
+        <article class="product-card">
+          <div class="product-image-container">
+            {% if rel.imagenes.first %}
+              <img src="{{ rel.imagen_principal_url }}" alt="{{ rel.nombre_comercial }}" class="product-img" loading="lazy">
+            {% else %}
+              <div class="product-img-placeholder">📦</div>
+            {% endif %}
+          </div>
+          <div class="product-info">
+            <span class="product-category-tag">{{ rel.categoria.nombre }}</span>
+            <h3 class="product-title">
+              <a href="{% url 'catalogo:detalle' rel.slug %}">{{ rel.nombre_comercial }}</a>
+            </h3>
+            <span class="product-unit-badge">Venta: {{ rel.unidad_compra|default:"1 unidad" }}</span>
+            <div class="product-bottom-row">
+              <div class="price-block">
+                <span class="price-label">Precio ref. con IVA</span>
+                <span class="price-value">${{ rel.precio_sugerido_total_clp|floatformat:"0" }}</span>
+              </div>
+              <form action="{% url 'canasta_agregar' %}" method="POST" class="ajax-add-cart">
+                {% csrf_token %}
+                <input type="hidden" name="producto_id" value="{{ rel.id }}">
+                <input type="hidden" name="cantidad" value="1">
+                <button type="submit" class="btn-add-cart-card">+ Cotizar</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

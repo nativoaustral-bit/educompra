@@ -5,29 +5,50 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}EduCompra Humm — Tecnología para Educación{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}Plataforma educativa para profesores y colegios en Chile. Cotizaciones, especificaciones técnicas neutras y componentes de robótica, electrónica y STEM.{% endblock %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/reset.css' %}">
   <link rel="stylesheet" href="{% static 'css/educompra.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
+  {% if user.is_authenticated and user.is_staff %}
+    <aside class="preview-banner" aria-label="Aviso de Modo Preview">
+      <div class="banner-inner">
+        <span class="preview-tag">MODO PREVIEW FASE 4A</span>
+        <span>Está navegando como <strong>Administrador Humm</strong>. Los productos del catálogo curado son visibles exclusivamente para su usuario mientras permanezcan no publicados en producción.</span>
+      </div>
+    </aside>
+  {% endif %}
+
   <header class="site-header">
     <div class="header-container">
-      <a href="{% url 'core:home' %}" class="brand">
+      <a href="{% url 'core:home' %}" class="brand" aria-label="EduCompra Humm — Portada">
         <span class="brand-badge">HUMM</span>
         <span class="brand-title">EduCompra<span>.cl</span></span>
       </a>
-      <nav class="header-nav">
-        <a href="{% url 'core:health' %}" class="nav-link" title="Estado del Servicio">Salud</a>
-        <a href="/admin/" class="btn-admin" title="Panel Administrativo">Administración ↗</a>
+
+      <nav class="header-nav" aria-label="Navegación principal">
+        <a href="{% url 'core:home' %}" class="nav-link">Inicio</a>
+        <a href="{% url 'catalogo:lista' %}" class="nav-link">Catálogo</a>
+        <a href="{% url 'mi_cotizacion' %}" class="btn-canasta" aria-label="Mi Cotización">
+          <span>📋 Mi Cotización</span>
+          <span class="badge-count" id="header-canasta-count">{{ canasta_total_items|default:"0" }}</span>
+        </a>
+        {% if user.is_authenticated and user.is_staff %}
+          <a href="/admin/" class="btn-admin" title="Panel Administrativo">Administración ↗</a>
+        {% endif %}
       </nav>
     </div>
   </header>
 
-  <main class="main-wrapper">
+  <main class="main-wrapper" id="main-content">
     {% if messages %}
-      <div style="margin-bottom: 20px;">
+      <div class="messages-container" role="alert">
         {% for message in messages %}
-          <div style="padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+          <div class="alert-box alert-{{ message.tags|default:'info' }}">
             {{ message }}
           </div>
         {% endfor %}
@@ -39,8 +60,42 @@
 
   <footer class="site-footer">
     <div class="footer-container">
-      <p><strong>EduCompra Humm</strong> — Cotizaciones y antecedentes técnicos para compras escolares y públicas.</p>
-      <p style="font-size: 0.8rem; color: #64748b;">Plataforma independiente del ecosistema Humm Chile. Vinculada a www.humm.cl.</p>
+      <div class="footer-grid">
+        <div class="footer-col">
+          <div class="brand-footer">
+            <span class="brand-badge">HUMM</span>
+            <span class="brand-title">EduCompra<span>.cl</span></span>
+          </div>
+          <p class="footer-desc">
+            Plataforma especializada en soluciones tecnológicas para colegios, liceos y proyectos educativos escolares en Chile.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h4>Navegación</h4>
+          <ul class="footer-links">
+            <li><a href="{% url 'core:home' %}">Inicio</a></li>
+            <li><a href="{% url 'catalogo:lista' %}">Catálogo Completo</a></li>
+            <li><a href="{% url 'mi_cotizacion' %}">Mi Lista de Cotización</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Compras Públicas y Colegios</h4>
+          <p class="footer-text">
+            Facilitamos cotizaciones formales para postulación a fondos SEP, FAEP, Subvención Escolar y compras mediante Mercado Público (Compra Ágil, Licitaciones y Convenio Marco).
+          </p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p class="disclaimer-text">
+          <strong>Aviso sobre precios y cotizaciones:</strong> Los precios mostrados en este portal son referenciales en pesos chilenos con IVA incluido para efectos de presupuesto institucional. La cotización formal final con plazos de entrega y costos de despacho será emitida por Humm tras la revisión del equipo técnico.
+        </p>
+        <p class="copyright">
+          © {% now "Y" %} Humm — EduCompra Chile. Todos los derechos reservados.
+        </p>
+      </div>
     </div>
   </footer>
 

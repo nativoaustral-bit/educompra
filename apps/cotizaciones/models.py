@@ -5,38 +5,68 @@ from apps.catalogo.models import Producto
 
 class SolicitudCotizacion(models.Model):
     ESTADOS = [
-        ("nueva", "Nueva solicitud recibida"),
-        ("en_revision", "En revisión técnica / stock"),
-        ("cotizacion_preparada", "Cotización formal preparada"),
-        ("cotizacion_enviada", "Cotización enviada al solicitante"),
-        ("esperando_proceso_compra", "Esperando gestión de compra / DAEM"),
-        ("proceso_publicado", "Proceso publicado en Mercado Público"),
-        ("oferta_presentada", "Oferta Humm presentada en Mercado Público"),
-        ("adjudicada", "Adjudicada a Humm"),
-        ("orden_compra_recibida", "Orden de Compra recibida"),
-        ("en_preparacion", "En preparación / Bodega"),
-        ("despachada", "Despachada a destino"),
-        ("cerrada", "Cerrada exitosamente"),
-        ("cancelada_perdida", "Cancelada / Desestimada"),
+        ("NUEVA", "Nueva solicitud recibida"),
+        ("EN_REVISION", "En revisión técnica / stock"),
+        ("REQUIERE_ANTECEDENTES", "Requiere contactar al docente por antecedentes"),
+        ("LISTA_PARA_COTIZAR", "Lista para emitir cotización"),
+        ("COTIZACION_PREPARADA", "Cotización formal preparada"),
+        ("COTIZACION_ENVIADA", "Cotización enviada al colegio"),
+        ("CERRADA", "Cerrada exitosamente (Venta realizada)"),
+        ("PERDIDA", "Desestimada / Perdida"),
+        ("CANCELADA", "Cancelada por el solicitante"),
     ]
 
+    token = models.UUIDField(
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        db_index=True,
+        verbose_name="Token de Confirmación Pública"
+    )
     codigo_seguimiento = models.CharField(
         max_length=32,
         unique=True,
         db_index=True,
-        verbose_name="Código de Seguimiento",
-        help_text="Identificador amigable entregado al profesor (ej: SOL-2026-A1B2)."
+        verbose_name="Código de Solicitud",
+        help_text="Identificador comercial amigable entregado al profesor (ej: EC-2026-A1B2C3)."
     )
     nombre_solicitante = models.CharField(max_length=150, verbose_name="Nombre del Solicitante / Profesor")
     email = models.EmailField(verbose_name="Correo Electrónico")
     telefono = models.CharField(max_length=50, verbose_name="Teléfono / WhatsApp")
     establecimiento = models.CharField(max_length=200, verbose_name="Colegio / Establecimiento Educacional")
+    tipo_institucion = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Tipo de Institución",
+        help_text="Dependencia institucional informada (ej: Municipal/SLEP, Particular Subvencionado, etc.)"
+    )
+    cargo_solicitante = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Cargo o Rol del Solicitante"
+    )
+    proyecto_educativo = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Nombre o Finalidad del Proyecto Educativo"
+    )
+    fecha_requerida_aproximada = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Fecha Aproximada Requerida"
+    )
     comuna = models.CharField(max_length=100, verbose_name="Comuna")
     region = models.CharField(max_length=100, verbose_name="Región")
     institucion_responsable_compra = models.CharField(
         max_length=200,
         blank=True,
         verbose_name="Institución Responsable de Compra (si difiere, ej: DAEM, Corporación)"
+    )
+    rut_institucion = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="RUT Institución (Opcional)"
     )
     contacto_adquisiciones_nombre = models.CharField(
         max_length=150,
@@ -47,8 +77,8 @@ class SolicitudCotizacion(models.Model):
         blank=True,
         verbose_name="Email Encargado de Compras (Opcional)"
     )
-    observaciones = models.TextField(blank=True, verbose_name="Observaciones del Profesor")
-    estado = models.CharField(max_length=40, choices=ESTADOS, default="nueva", db_index=True, verbose_name="Estado")
+    observaciones = models.TextField(blank=True, verbose_name="Observaciones / Comentarios del Profesor")
+    estado = models.CharField(max_length=40, choices=ESTADOS, default="NUEVA", db_index=True, verbose_name="Estado")
     total_referencial_estimado = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -56,7 +86,7 @@ class SolicitudCotizacion(models.Model):
         verbose_name="Total Referencial Estimado (CLP)"
     )
 
-    # Campos futuros preparados para seguimiento de Mercado Público
+    # Campos de trazabilidad administrativa y compra pública
     id_licitacion_mp = models.CharField(max_length=50, blank=True, verbose_name="ID Licitación Mercado Público")
     id_compra_agil_mp = models.CharField(max_length=50, blank=True, verbose_name="ID Compra Ágil Mercado Público")
     id_orden_compra_mp = models.CharField(max_length=50, blank=True, verbose_name="ID Orden de Compra Mercado Público")
@@ -74,15 +104,30 @@ class SolicitudCotizacion(models.Model):
         return f"{self.codigo_seguimiento} — {self.establecimiento} ({self.nombre_solicitante})"
 
     def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = uuid.uuid4()
         if not self.codigo_seguimiento:
+            from django.utils import timezone
+            anio = timezone.now().year
             correlativo = uuid.uuid4().hex[:6].upper()
-            self.codigo_seguimiento = f"SOL-{correlativo}"
+            self.codigo_seguimiento = f"EC-{anio}-{correlativo}"
         super().save(*args, **kwargs)
 
     def recalcular_total_referencial(self):
         total = sum(item.subtotal_referencial_snapshot for item in self.items.all())
         self.total_referencial_estimado = total
         self.save(update_fields=["total_referencial_estimado"])
+
+    @property
+    def requiere_validacion_tecnica(self):
+        """
+        Retorna True si la solicitud contiene productos cuya especificación neutral
+        aún no ha sido validada documentalmente (estado != VALIDADO_HUMM).
+        """
+        for item in self.items.all():
+            if item.producto and not item.producto.puede_generar_cotizacion_formal():
+                return True
+        return False
 
 
 class SolicitudItem(models.Model):
@@ -107,6 +152,7 @@ class SolicitudItem(models.Model):
     # aunque el producto original cambie o sea eliminado del catálogo.
     # =========================================================================
     sku_humm_snapshot = models.CharField(max_length=64, verbose_name="SKU Humm (Snapshot)")
+    sku_proveedor_snapshot = models.CharField(max_length=64, blank=True, verbose_name="SKU Proveedor (Snapshot)")
     marca_snapshot = models.CharField(max_length=100, verbose_name="Marca (Snapshot)")
     modelo_snapshot = models.CharField(max_length=100, blank=True, verbose_name="Modelo (Snapshot)")
     nombre_comercial_snapshot = models.CharField(max_length=255, verbose_name="Nombre Comercial (Snapshot)")
@@ -114,6 +160,12 @@ class SolicitudItem(models.Model):
         blank=True,
         verbose_name="Especificación Neutra (Snapshot)",
         help_text="Copia inmutable de la especificación técnica neutra vigente al cotizar."
+    )
+    unidad_comercial_snapshot = models.CharField(
+        max_length=50,
+        default="unidad",
+        verbose_name="Unidad Comercial (Snapshot)",
+        help_text="Unidad de venta comercial congelada (ej: unidad, pack (3 unidades), set (120 cables))."
     )
     cantidad = models.PositiveIntegerField(default=1, verbose_name="Cantidad")
     precio_referencial_unitario_snapshot = models.DecimalField(
@@ -140,9 +192,11 @@ class SolicitudItem(models.Model):
         # Si hay producto vinculado y los snapshots están vacíos, congelar datos actuales
         if self.producto and not self.sku_humm_snapshot:
             self.sku_humm_snapshot = self.producto.sku_humm
+            self.sku_proveedor_snapshot = self.producto.sku_proveedor
             self.marca_snapshot = self.producto.marca
             self.modelo_snapshot = self.producto.modelo
             self.nombre_comercial_snapshot = self.producto.nombre_comercial
+            self.unidad_comercial_snapshot = self.producto.unidad_compra or "unidad"
             self.especificacion_neutra_snapshot = self.producto.especificacion_tecnica_neutral
             if self.precio_referencial_unitario_snapshot == 0:
                 self.precio_referencial_unitario_snapshot = self.producto.precio_sugerido_total_clp
@@ -150,6 +204,11 @@ class SolicitudItem(models.Model):
         # Calcular subtotal del snapshot
         self.subtotal_referencial_snapshot = self.cantidad * self.precio_referencial_unitario_snapshot
         super().save(*args, **kwargs)
+
+    @property
+    def desglose_unidades(self):
+        from apps.cotizaciones.services import calcular_desglose_unidades
+        return calcular_desglose_unidades(self.unidad_comercial_snapshot, self.cantidad)
 
 
 class CotizacionFormal(models.Model):

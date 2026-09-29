@@ -18,6 +18,12 @@ class Command(BaseCommand):
             help="Directorio de destino para los respaldos.",
         )
         parser.add_argument(
+            "--filename",
+            type=str,
+            default="",
+            help="Nombre específico del archivo de respaldo (opcional).",
+        )
+        parser.add_argument(
             "--keep",
             type=int,
             default=14,
@@ -46,8 +52,12 @@ class Command(BaseCommand):
         dest_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(dest_dir, 0o700)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"educompra_{timestamp}.sqlite3"
+        custom_name = options.get("filename")
+        if custom_name:
+            backup_filename = custom_name if custom_name.endswith(".sqlite3") else f"{custom_name}.sqlite3"
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"educompra_{timestamp}.sqlite3"
         dest_path = dest_dir / backup_filename
 
         self.stdout.write(f"Iniciando respaldo en caliente de {source_path.name}...")

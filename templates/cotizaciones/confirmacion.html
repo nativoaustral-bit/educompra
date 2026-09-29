@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Solicitud Recibida [{{ solicitud.codigo_seguimiento }}] — EduCompra Humm{% endblock %}
+
+{% block content %}
+<div class="confirmation-card">
+  <div class="confirmation-header">
+    <div class="success-icon-badge">✓</div>
+    <h1 style="font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">
+      ¡Solicitud Recibida Exitosamente!
+    </h1>
+    <p style="color: #64748b; font-size: 1rem; margin: 0 0 16px 0;">
+      Hemos registrado tu requerimiento para <strong>{{ solicitud.establecimiento }}</strong>.
+    </p>
+
+    <div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+      Código de Solicitud
+    </div>
+    <div class="tracking-code-pill">
+      {{ solicitud.codigo_seguimiento }}
+    </div>
+  </div>
+
+  <!-- Pasos siguientes -->
+  <div class="timeline-steps">
+    <div class="step-box">
+      <span class="step-number">1</span>
+      <h4>Recepción Registrada</h4>
+      <p>Tu solicitud fue ingresada en nuestro sistema comercial de Humm.</p>
+    </div>
+
+    <div class="step-box">
+      <span class="step-number">2</span>
+      <h4>Revisión Técnica</h4>
+      <p>Validamos disponibilidad de stock y compatibilidad pedagógica.</p>
+    </div>
+
+    <div class="step-box">
+      <span class="step-number">3</span>
+      <h4>Cotización Formal</h4>
+      <p>Te enviamos por correo el documento formal para postular a fondos o comprar.</p>
+    </div>
+  </div>
+
+  <!-- Detalle de Productos Solicitados (Snapshots inmutables) -->
+  <div style="margin-top: 32px;">
+    <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">
+      Resumen de Productos Solicitados
+    </h2>
+
+    <table class="cart-table" aria-label="Resumen de productos solicitados">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Presentación</th>
+          <th style="text-align: center;">Cantidad</th>
+          <th style="text-align: right;">Precio Ref. Unitario</th>
+          <th style="text-align: right;">Subtotal Ref.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+          <tr>
+            <td>
+              <strong style="color: #0f172a; font-size: 0.95rem;">{{ item.nombre_comercial_snapshot }}</strong>
+              <div style="font-size: 0.78rem; color: #64748b;">SKU: {{ item.sku_humm_snapshot }}</div>
+            </td>
+            <td style="color: #475569; font-size: 0.88rem;">{{ item.unidad_comercial_snapshot }}</td>
+            <td style="text-align: center; font-weight: 700;">{{ item.cantidad }}</td>
+            <td style="text-align: right; color: #475569;">${{ item.precio_referencial_unitario_snapshot|floatformat:"0" }}</td>
+            <td style="text-align: right; font-weight: 800; color: #0f172a;">${{ item.subtotal_referencial_snapshot|floatformat:"0" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="display:flex; justify-content:flex-end; align-items:center; gap:16px; margin-top:16px; padding-top:16px; border-top:2px solid #e2e8f0;">
+      <span style="font-size:1.1rem; color:#475569;">Total Referencial Estimado:</span>
+      <span style="font-size:1.6rem; font-weight:800; color:#1e3a8a;">${{ total_referencial|floatformat:"0" }}</span>
+    </div>
+
+    <div style="font-size:0.75rem; color:#64748b; text-align:right; margin-top:4px;">
+      Valores en pesos chilenos con IVA incluido.
+    </div>
+  </div>
+
+  <div style="margin-top: 32px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; color: #475569; line-height: 1.5;">
+    <strong>Comprobante para presupuesto escolar:</strong> Guarda este enlace o tu código <strong>{{ solicitud.codigo_seguimiento }}</strong> para consultar el avance con nuestro equipo. Enviamos un respaldo con este mismo detalle a tu correo de contacto.
+  </div>
+
+  <div style="display:flex; justify-content:center; gap:14px; margin-top:32px;">
+    <button onclick="window.print();" class="btn-admin" style="cursor:pointer; padding:10px 20px;">
+      🖨️ Imprimir Resumen
+    </button>
+    <a href="{% url 'catalogo:lista' %}" class="btn-proceed-checkout" style="width:auto; padding:10px 24px; margin-top:0;">
+      Volver al Catálogo
+    </a>
+  </div>
+</div>
+{% endblock %}
