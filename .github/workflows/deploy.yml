@@ -103,6 +103,7 @@ jobs:
           cd "$APP_DIR"
           "${VENV_DIR}/bin/python" manage.py migrate --noinput
           "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
+          "${VENV_DIR}/bin/python" manage.py activar_catalogo_publico_fase_4
 
           echo "=== 5. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
           chmod 755 "$SUBDOMAIN_DIR"
@@ -164,6 +165,13 @@ jobs:
             exit 1
           fi
           echo "✔ EduCompra en producción responde correctamente: HTTP $HTTP_STATUS"
+
+          HTTP_CATALOGO=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/catalogo/)
+          if [ "$HTTP_CATALOGO" != "200" ]; then
+            echo "❌ Error: Catálogo público devolvió código HTTP $HTTP_CATALOGO (esperado 200)." >&2
+            exit 1
+          fi
+          echo "✔ Catálogo público responde correctamente: HTTP $HTTP_CATALOGO"
 
       - name: 8. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
         run: |
