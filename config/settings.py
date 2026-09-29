@@ -14,10 +14,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Añadir directorio apps al path para importación limpia y auto-descubrimiento de tests
 sys.path.insert(0, str(BASE_DIR / "apps"))
 
-# Cargar variables de entorno desde .env si existe
+# Cargar variables de entorno desde .env local o secrets/.env de producción
 env_path = BASE_DIR / ".env"
+prod_secrets_path = BASE_DIR.parent / "secrets" / ".env"
 if env_path.exists():
     load_dotenv(env_path)
+elif prod_secrets_path.exists():
+    load_dotenv(prod_secrets_path)
 
 # ==============================================================================
 # SEGURIDAD Y ENTORNO
