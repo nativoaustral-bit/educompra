@@ -51,6 +51,8 @@ secrets/
 *.sublime-workspace
 .DS_Store
 
-# Temporary files
+# Temporary and import files
 tmp/
 *.tmp
+data_import/
+backups/

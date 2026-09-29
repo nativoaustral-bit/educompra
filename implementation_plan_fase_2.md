@@ -30,34 +30,82 @@ Conforme a las directrices de arquitectura y planificación del proyecto:
 
 ---
 
-## 2. Diagnóstico de Datos de Entrada
+## 2. Diagnóstico y Estructura Real de Datos de Entrada
 
-### 2.1 Archivo Excel Maestro (Keyestudio)
-* **Volumen Estimado:** ~966 filas brutas (~945 SKUs únicos de abastecimiento).
-* **Campos Críticos Esperados en el Excel:**
-  1. `SKU / Item No.` (ej: `KS0011`, `KS0456`): Clave de enlace única del fabricante.
-  2. `Product Name / Description`: Denominación en inglés del fabricante.
-  3. `Category / Subcategory`: Categoría asignada en fábrica (utilizada como sugerencia inicial de clasificación).
-  4. `Unit Price (USD)`: Costo de adquisición mayorista en dólares estadounidenses.
-  5. `Package / Unit`: Presentación (unidad, set, pack).
-* **Casuísticas a Controlar Durante la Lectura:**
-  * Celdas con fórmulas o texto formateado como moneda (`$ 12.50`, espacios, comas en lugar de puntos).
-  * Filas de cabecera múltiples o notas al pie del proveedor.
-  * Filas en blanco o productos discontinuados sin precio.
-  * SKUs repetidos con ligeras variaciones de empaque o versión.
+### 2.1 Archivo Excel Maestro (Keyestudio) — Estructura Real
+El archivo maestro Keyestudio disponible actualmente contiene **exactamente** las siguientes 5 columnas:
+1. `SKU o ID` (Clave de enlace del fabricante, ej: `KS0011`).
+2. `Descripción del producto` (Texto original en inglés del fabricante).
+3. `Miniatura` (Enlace o referencia a miniatura web; puede venir vacía y no es obligatoria).
+4. `Precio (USD)` (Texto con formato como `11.99 USD`, debe normalizarse a `Decimal`).
+5. `Imagen alta resolución` (Referencia a imagen de alta resolución).
 
-### 2.2 Banco de Imágenes
-* **Nomenclatura Estándar:** `<SKU_PROVEEDOR>.<ext>` (ej: `KS0011.jpg`, `KS0011.png`, `KS0011.webp`).
-* **Directorio de Destino en Producción:**  
-  `/home1/paulocis/educompra.humm.cl/media/productos/`
-* **Reglas de Procesamiento de Imágenes con Pillow:**
-  * Conversión automática a formatos web optimizados o compresión ligera para minimizar el peso de carga en el admin.
-  * Generación automática de miniaturas (*thumbnails*) para el listado del panel de administración Django.
-  * Si un SKU del Excel no cuenta con imagen física en el banco, el producto se creará normalmente, marcándose internamente para recibir el placeholder estilizado de EduCompra.
+> [!IMPORTANT]
+> **Ajuste de Estructura:** No asumir columnas como `Category`, `Subcategory`, `Package / Unit` ni clasificaciones adicionales. La importación opera exclusivamente contra estos 5 encabezados reales.
+
+* **Volumen Real Estimado:**
+  * Aproximadamente **966 filas de productos**.
+  * Aproximadamente **944 SKUs únicos**.
+  * El importador **no codificará estas cifras como constantes**, sino que las calculará dinámicamente en cada ejecución.
+* **Normalización de Precios:**
+  * La columna `Precio (USD)` contiene texto (ej: `11.99 USD`, `$11.99`, ` 11,99 USD `).
+  * Se implementará un parser robusto con expresiones regulares para extraer la cifra numérica, convertir comas a puntos y retornar un `Decimal(2)` válido o marcar error si no puede interpretarse.
+* **Categorización Inicial:**
+  * Dado que el Excel no contiene categorías, **todos los productos nuevos ingresarán inicialmente bajo la categoría: "Sin clasificar"**.
+  * No se realizará categorización automática definitiva en Fase 2; la curaduría y clasificación temática se ejecutará en Fase 3.
+
+### 2.2 Banco de Imágenes y Derivados Optimizados
+* **Nomenclatura Estándar:** Coincidencia directa `SKU → nombre de archivo`.
+* **Formatos Soportados:** `.jpg`, `.jpeg`, `.png`, `.webp`.
+* **Variantes Soportadas:** `SKU.ext`, `SKU_01.ext`, `SKU_02.ext`, `SKU_1.ext`, `SKU-1.ext`.
+* **Imagen de Portada:** La primera imagen válida encontrada se asignará automáticamente como portada (`es_portada = True`).
+* **Preservación de Fuentes:** No se modificarán ni destruirán los archivos fuente originales.
+* **Derivados con Pillow:** Se generarán miniaturas y versiones web optimizadas para el catálogo y el panel de administración.
+* **Directorio en Producción:** `/home1/paulocis/educompra.humm.cl/media/productos/`.
 
 ---
 
-## 3. Arquitectura del Motor de Importación
+## 3. Manejo Obligatorio de Duplicados en Dry-Run
+
+El comando de simulación clasificará obligatoriamente los registros con SKU repetidos en:
+
+1. **Duplicado Idéntico:**
+   * Mismo SKU, misma descripción y mismo precio.
+   * Se consolida en un único registro para importación, reportando la duplicidad en el informe.
+2. **Duplicado Conflictivo:**
+   * Mismo SKU pero diferente descripción, precio u otra información relevante.
+   * **Regla estricta:** NO elegir automáticamente.
+   * Se marca con estado: **`CONFLICTO — REQUIERE REVISIÓN`** y **se excluye de la importación definitiva** hasta su resolución manual por Humm.
+   * El informe mostrará en detalle cada fila en conflicto, los valores dispares y las líneas del Excel afectadas.
+
+---
+
+## 4. Fórmula Paramétrica de Pricing
+
+Se utilizará consistentemente el término **RECARGO COMERCIAL** (evitando "margen" para no confundir markup con margen bruto):
+
+$$
+\text{Costo Puesto Chile (CLP)} = \text{costo\_proveedor\_usd} \times \text{tipo\_cambio} \times \left(1 + \frac{\text{factor\_internacion}}{100}\right)
+$$
+
+$$
+\text{Precio Sugerido Neto (CLP)} = \text{Costo Puesto Chile (CLP)} \times \left(1 + \frac{\text{recargo\_comercial}}{100}\right)
+$$
+
+$$
+\text{Precio Sugerido Total con IVA (CLP)} = \text{Precio Sugerido Neto (CLP)} \times \left(1 + \frac{\text{iva}}{100}\right)
+$$
+
+* Todos los parámetros se extraen del singleton administrable `ConfiguracionPricing` (recargo comercial base de 80.00%, tipo de cambio, internación 15.00%, IVA 19.00%).
+
+---
+
+## 5. Respaldo Consistente de SQLite
+
+El comando `respaldar_sqlite` implementa la *SQLite Online Backup API* (`sqlite3.Connection.backup()`), garantizando:
+* Respaldo atómico y consistente sin detener la aplicación ni ignorar el estado de los archivos WAL (`-wal` / `-shm`).
+* Verificación posterior inmediata de integridad (`PRAGMA integrity_check;`).
+* Ubicación fuera del document root (`/home1/paulocis/apps/educompra/backups/`) con permisos restrictivos `0700` (directorio) y `0600` (archivo).
 
 Para garantizar robustez y evitar los límites de tiempo de ejecución HTTP en servidores compartidos (Apache/Passenger suele cortar peticiones web tras 30–60 segundos), el importador se desarrollará como un **comando de gestión CLI** de Django:
 
@@ -131,7 +179,7 @@ $$
 $$
 
 $$
-\text{Precio Sugerido Neto (CLP)} = \text{Costo Puesto Chile (CLP)} \times \left(1 + \frac{\text{recargo\_general}}{100}\right)
+\text{Precio Sugerido Neto (CLP)} = \text{Costo Puesto Chile (CLP)} \times \left(1 + \frac{\text{recargo\_comercial}}{100}\right)
 $$
 
 $$
@@ -145,71 +193,84 @@ $$
 
 ## 6. Plan de Trabajo Detallado (Paso a Paso)
 
-### Tarea 2.1 — Preparación de Infraestructura y Modelos de Imágenes
-* Verificar los modelos `ProductoImagen` y sus directivas de subida en `apps.catalogo`.
+### Tarea 2.1 — Modelos y Almacenamiento de Imágenes
+* Verificar los modelos `ProductoImagen` y sus directivas de almacenamiento en `apps.catalogo`.
 * Configurar almacenamiento en `MEDIA_ROOT` (`/home1/paulocis/educompra.humm.cl/media/productos/`).
-* Configurar servicio de miniaturas (*thumbnails*) mediante Pillow.
+* Configurar generación de miniaturas y optimización con Pillow para admin/catálogo.
 
 ### Tarea 2.2 — Desarrollo del Comando `importar_catalogo_keyestudio`
 * Crear archivo `apps/catalogo/management/commands/importar_catalogo_keyestudio.py`.
-* Implementar parser de Excel con `openpyxl` optimizado en modo lectura (`read_only=True`).
+* Implementar parser con `openpyxl` en modo lectura (`read_only=True`).
+* Implementar normalización de encabezados y parsing numérico seguro para `Precio (USD)` (`11.99 USD` -> `Decimal`).
+* Implementar lógica de clasificación de duplicados:
+  * **Duplicados idénticos:** Consolidación automática y registro de auditoría.
+  * **Duplicados conflictivos:** Marcado como `CONFLICTO — REQUIERE REVISIÓN` y exclusión preventiva de importación.
 * Añadir flags de ejecución:
-  * `--excel`: Ruta al archivo Excel maestro.
-  * `--imagenes`: Ruta a la carpeta de imágenes por SKU.
-  * `--dry-run`: Modo simulación sin persistencia en base de datos.
-  * `--limite`: Parámetro opcional para pruebas de lotes reducidos (ej: `--limite=10`).
-* Incorporar manejo de transacciones con `transaction.atomic()` en bloques controlados.
+  * `--excel`: Ruta al archivo Excel maestro Keyestudio.
+  * `--imagenes`: Ruta al directorio de imágenes por SKU.
+  * `--dry-run`: Simulación completa obligatoria sin persistencia en base de datos.
+  * `--limite`: Parámetro opcional para pruebas de lotes reducidos.
 
 ### Tarea 2.3 — Algoritmo de Vinculación de Imágenes por SKU
-* Normalización de nombres de archivo: eliminación de extensiones, conversión a mayúsculas.
-* Soporte para sufijos de variantes (ej: `KS0011_01.jpg`, `KS0011_02.jpg`).
-* Detección de imagen principal y asignación de `es_portada = True`.
+* Normalización: eliminación de extensiones, conversión a mayúsculas (`strip().upper()`).
+* Soporte para variantes: `SKU.ext`, `SKU_01.ext`, `SKU_02.ext`, `SKU_1.ext`, `SKU-1.ext`.
+* Asignación automática de portada a la primera imagen válida encontrada (`es_portada = True`).
 * Flag en producto `tiene_imagen` para filtrado rápido en el administrador.
 
 ### Tarea 2.4 — Suite de Pruebas Automatizadas del Importador
 * Desarrollar pruebas unitarias en `apps/catalogo/tests/test_importador.py`:
-  1. Prueba de importación exitosa de un archivo Excel de prueba en memoria.
-  2. Prueba del cálculo correcto de precios según fórmula de pricing.
-  3. Prueba de no-sobrescritura (upsert blindado): confirmar que un producto ya enriquecido conserva sus descripciones y estado publicado al re-importar.
-  4. Prueba de vinculación de imágenes con archivos simulados en `SimpleUploadedFile`.
-  5. Prueba del flag `--dry-run` asegurando que no se creen registros.
+  1. Prueba de parsing de precios (`11.99 USD`, `$11.99`, espacios, comas).
+  2. Prueba de clasificación de duplicados (idénticos vs conflictivos).
+  3. Prueba del cálculo correcto de precios según fórmula de recargo comercial.
+  4. Prueba de no-sobrescritura (upsert blindado): confirmar que un producto ya enriquecido conserva sus descripciones y estado publicado al re-importar.
+  5. Prueba de vinculación de imágenes y flags de cobertura.
+  6. Prueba estricta del flag `--dry-run` asegurando que no se creen registros.
 
-### Tarea 2.5 — Ejecución de Importación Real en Producción
-1. Recepción y disposición del archivo Excel y banco de imágenes en el servidor HostGator.
-2. Ejecución previa de respaldo atómico: `python manage.py respaldar_sqlite`.
-3. Ejecución en modo simulación: `python manage.py importar_catalogo_keyestudio --excel=... --dry-run`.
-4. Revisión del reporte de simulación (filas leídas, SKUs detectados, inconsistencias detectadas).
-5. Ejecución definitiva de importación masiva.
-6. Ejecución posterior de respaldo atómico: `python manage.py respaldar_sqlite`.
+### Tarea 2.5 — PUNTO DE CONTROL OBLIGATORIO: Ejecución de Dry-Run Real
+1. Recepción y disposición del archivo Excel y banco de imágenes en el entorno de trabajo.
+2. Ejecución exclusiva en modo simulación:
+   ```bash
+   python manage.py importar_catalogo_keyestudio \
+       --excel=... \
+       --imagenes=... \
+       --dry-run
+   ```
+3. Generación del documento formal:
+   # `REPORTE_DRY_RUN_CATALOGO_FASE_2.md`
+   con las métricas reales exigidas:
+   * Filas totales leídas
+   * Filas válidas
+   * SKU únicos
+   * SKU duplicados (idénticos vs conflictivos detallados)
+   * Filas sin SKU / sin precio / precios no interpretables
+   * Rango de precios USD (mínimo, máximo, promedio)
+   * Imágenes encontradas, productos sin imagen, imágenes huérfanas
+   * Conteo de productos que se crearían, actualizarían o ignorarían
+4. **DETENCIÓN OBLIGATORIA:** Enviar el reporte a Humm para revisión y autorización antes de cualquier escritura en la base de datos de producción.
 
-### Tarea 2.6 — Verificación en Django Admin y Control de Calidad
-* Acceder a `https://educompra.humm.cl/admin/catalogo/producto/`.
-* Verificar:
-  * Total de productos creados (~945 SKUs).
-  * Estado `publicado = False` en el 100% de los ítems.
-  * Costos USD y precios CLP coherentes y redondeados.
-  * Imágenes desplegadas correctamente en el listado y detalle del admin.
-  * Filtros por categoría, estado de stock y presencia de imagen operativos.
-
-### Tarea 2.7 — Informe de Cierre de Fase 2
-* Elaboración de `INFORME_IMPLEMENTACION_FASE_2.md` con:
-  * Métricas reales de importación (total procesado, creados, duplicados detectados, imágenes vinculadas).
-  * Estadísticas de precios calculados (rango mínimo, máximo, promedio).
-  * Confirmación de despublicación total previa a curaduría.
-  * Resultados de la suite de pruebas.
+### Tarea 2.6 — Ejecución de Importación Definitiva (Solo tras Aprobación de Dry-Run)
+* Respaldo previo consistente: `python manage.py respaldar_sqlite`.
+* Ejecución de importación real sin `--dry-run`.
+* Respaldo posterior consistente: `python manage.py respaldar_sqlite`.
+* Verificación en Django Admin (`https://educompra.humm.cl/admin/catalogo/producto/`):
+  * 100% de productos en estado `publicado = False`.
+  * Precios en CLP coherentes y redondeados.
+  * Imágenes vinculadas desplegadas en admin.
+* Elaboración y entrega de `INFORME_IMPLEMENTACION_FASE_2.md`.
 
 ---
 
-## 7. Criterios de Aceptación para Dar por Concluida la Fase 2
+## 7. Criterios de Aceptación de la Fase 2
 
-1. **Ingesta Completa:** La totalidad del catálogo Keyestudio incorporada en SQLite sin caídas de proceso.
+1. **Ingesta Completa y Segura:** Catálogo Keyestudio incorporado en SQLite sin errores ni bloqueos.
 2. **Despublicación Estricta:** Ningún producto visible en la web pública (`publicado = False`).
-3. **Cálculo de Precios Válido:** Precios referenciales en CLP calculados para cada ítem conforme a la fórmula paramétrica.
+3. **Cálculo de Precios Válido:** Precios referenciales en CLP calculados para cada ítem conforme a la fórmula de recargo comercial.
 4. **Imágenes Asociadas:** Imágenes por SKU vinculadas automáticamente y visualizables en el administrador.
 5. **Idempotencia Comprobada:** Una segunda ejecución del importador no duplica registros ni modifica textos pedagógicos.
-6. **Integridad y Respaldo:** Copia de seguridad SQLite (`.sqlite3`) generada y almacenada con permisos `0600`.
-7. **Pipeline CI/CD:** Todo el código integrado y desplegado en GitHub Actions sin errores.
+6. **Integridad y Respaldo:** Copia de seguridad SQLite generada con SQLite Online Backup API y verificada con `PRAGMA integrity_check`.
+7. **Control de Calidad Superado:** Dry-run auditado y aprobado previamente por Humm mediante `REPORTE_DRY_RUN_CATALOGO_FASE_2.md`.
 
 ---
 
-*Plan preparado para revisión y aprobación previa a la ejecución de la importación.*
+*Plan actualizado con las observaciones de Humm. Listo para proceder con la implementación técnica del importador.*
+

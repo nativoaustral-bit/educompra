@@ -22,7 +22,7 @@ class ConfiguracionPricing(models.Model):
         default=Decimal(os.getenv("RECARGO_GENERAL_DEFAULT", "80.00")),
         validators=[MinValueValidator(Decimal("0.00"))],
         verbose_name="Recargo Comercial Sugerido (%)",
-        help_text="Porcentaje de margen sugerido sobre el costo internado (ej: 80.00%). Administrable, no codificado rígidamente."
+        help_text="Porcentaje de recargo comercial sugerido sobre el costo internado (ej: 80.00%). Administrable, no codificado rígidamente."
     )
     factor_internacion_flete_porcentaje = models.DecimalField(
         max_digits=6,

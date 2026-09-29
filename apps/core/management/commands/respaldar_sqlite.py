@@ -61,13 +61,23 @@ class Command(BaseCommand):
             dest_conn.close()
             source_conn.close()
 
+            # Verificar apertura e integridad del respaldo generado
+            check_conn = sqlite3.connect(str(dest_path))
+            cur = check_conn.cursor()
+            cur.execute("PRAGMA integrity_check;")
+            integrity_result = cur.fetchone()[0]
+            check_conn.close()
+            if integrity_result != "ok":
+                dest_path.unlink()
+                raise CommandError(f"Fallo en la prueba de integridad del respaldo: {integrity_result}")
+
             # Permisos restrictivos sobre el archivo de respaldo
             os.chmod(dest_path, 0o600)
 
             size_kb = dest_path.stat().st_size / 1024
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"✔ Respaldo completado exitosamente: {dest_path.name} ({size_kb:.1f} KB)"
+                    f"✔ Respaldo completado e integridad verificada: {dest_path.name} ({size_kb:.1f} KB)"
                 )
             )
         except Exception as e:
