@@ -83,6 +83,7 @@ class ProductoAdmin(admin.ModelAdmin):
         "apto_para_kit",
         TieneImagenFilter,
         "categoria",
+        "tecnologias_verificadas",
         "tecnologias_compatibles",
         "publicado",
         "activo",
@@ -97,7 +98,7 @@ class ProductoAdmin(admin.ModelAdmin):
         "nombre_original_proveedor",
     )
     list_editable = ("publicado",)
-    filter_horizontal = ("tecnologias_compatibles",)
+    filter_horizontal = ("tecnologias_verificadas", "tecnologias_compatibles")
     inlines = [ProductoImagenInline]
 
     @admin.display(description="Foto")
@@ -156,10 +157,11 @@ class ProductoAdmin(admin.ModelAdmin):
                 "estado_curaduria",
                 "categoria",
                 "nivel_dificultad",
+                "tecnologias_verificadas",
                 "tecnologias_compatibles",
                 "apto_para_kit",
             ),
-            "description": "Clasificación docente y selección para el catálogo público de EduCompra."
+            "description": "Compatibilidad verificada documentalmente y compatibilidad propuesta para el aula."
         }),
         ("Vista Profesor (Comercial y Aplicación en Aula)", {
             "fields": (
@@ -167,6 +169,7 @@ class ProductoAdmin(admin.ModelAdmin):
                 "descripcion_corta",
                 "uso_educativo",
                 "descripcion_educativa",
+                "advertencia_uso",
                 "unidad_compra",
             ),
             "description": "Información presentada al docente en el catálogo público."

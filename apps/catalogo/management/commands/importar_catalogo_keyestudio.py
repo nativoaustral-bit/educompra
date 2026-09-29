@@ -124,6 +124,12 @@ class Command(BaseCommand):
             action="store_true",
             help="Si se especifica, actualiza costos de productos ya existentes (Upsert).",
         )
+        parser.add_argument(
+            "--registro-conflictos",
+            type=str,
+            default="",
+            help="Ruta donde guardar el informe de conflictos de SKU (por defecto: CONFLICTOS_CATALOGO_KEYESTUDIO.md).",
+        )
 
     def handle(self, *args, **options):
         excel_path = Path(options["excel"])
@@ -472,7 +478,11 @@ class Command(BaseCommand):
         filas_validas_total = filas_totales_leidas - len(filas_sin_sku) - len(precios_no_interpretables)
 
         # Generar siempre el registro persistente de conflictos si existen
-        conflictos_file_path = Path(settings.BASE_DIR) / "CONFLICTOS_CATALOGO_KEYESTUDIO.md"
+        conflictos_file_path = (
+            Path(options["registro_conflictos"])
+            if options.get("registro_conflictos")
+            else Path(settings.BASE_DIR) / "CONFLICTOS_CATALOGO_KEYESTUDIO.md"
+        )
         self.generar_archivo_conflictos(duplicados_conflictivos, conflictos_file_path)
         self.stdout.write(self.style.SUCCESS(f"✔ Registro de conflictos persistido en: {conflictos_file_path}"))
 

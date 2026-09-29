@@ -60,6 +60,58 @@ class CuraduriaInfraestructuraTests(TestCase):
         self.assertEqual(self.producto.tecnologias_compatibles.count(), 2)
         self.assertIn(self.tec_arduino, self.producto.tecnologias_compatibles.all())
 
+    def test_diferenciacion_compatibilidad_propuesta_vs_verificada(self):
+        """
+        Verifica la separación arquitectónica entre:
+        - tecnologias_verificadas (respaldo técnico o documental registrado del fabricante)
+        - tecnologias_compatibles (propuesta de integración curricular o pedagógica Humm)
+        """
+        # Arduino verificado documentalmente por fabricante
+        self.producto.tecnologias_verificadas.add(self.tec_arduino)
+        # ESP32 propuesto pedagógicamente para proyectos de aula
+        self.producto.tecnologias_compatibles.add(self.tec_esp32)
+
+        self.producto.refresh_from_db()
+        self.assertIn(self.tec_arduino, self.producto.tecnologias_verificadas.all())
+        self.assertNotIn(self.tec_esp32, self.producto.tecnologias_verificadas.all())
+        self.assertIn(self.tec_esp32, self.producto.tecnologias_compatibles.all())
+        self.assertNotIn(self.tec_arduino, self.producto.tecnologias_compatibles.all())
+
+    def test_campo_advertencia_uso_educativo(self):
+        """
+        Verifica que el campo advertencia_uso sea opcional pero persista correctamente
+        para elementos con riesgos o que requieran supervisión (gases, fuego, relés, etc.).
+        """
+        # Por defecto debe ser cadena vacía
+        self.assertEqual(self.producto.advertencia_uso, "")
+
+        advertencia_gas = (
+            "Uso experimental en aula. Este módulo es para aprendizaje sobre detección "
+            "de gases y no debe utilizarse como detector de seguridad ni reemplazo de alarmas normadas."
+        )
+        self.producto.advertencia_uso = advertencia_gas
+        self.producto.save()
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.advertencia_uso, advertencia_gas)
+
+    def test_campos_trazabilidad_tecnica(self):
+        """
+        Verifica los 5 campos de trazabilidad técnica para responder:
+        ¿De dónde salió esta especificación?
+        """
+        self.producto.fuente_tecnica = "Datasheet Keyestudio Wiki v2.1"
+        self.producto.referencia_tecnica_url = "https://wiki.keyestudio.com/KS0001"
+        self.producto.responsable_revision_tecnica = "Ingeniero Curador Humm"
+        self.producto.observaciones_tecnicas = "Voltaje operativo verificado en documentación oficial."
+        self.producto.save()
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.fuente_tecnica, "Datasheet Keyestudio Wiki v2.1")
+        self.assertEqual(self.producto.referencia_tecnica_url, "https://wiki.keyestudio.com/KS0001")
+        self.assertEqual(self.producto.responsable_revision_tecnica, "Ingeniero Curador Humm")
+        self.assertEqual(self.producto.observaciones_tecnicas, "Voltaje operativo verificado en documentación oficial.")
+
     def test_valores_por_defecto_curaduria_y_especificacion(self):
         """Verifica que los nuevos productos nazcan con los estados iniciales correctos."""
         prod = Producto.objects.create(

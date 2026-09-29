@@ -78,6 +78,7 @@ class ImportadorKeyestudioTests(TestCase):
             excel=str(excel_path),
             dry_run=True,
             reporte=str(reporte_path),
+            registro_conflictos=str(excel_path.parent / "conflictos.md"),
         )
 
         # Cero productos en BD
@@ -110,9 +111,14 @@ class ImportadorKeyestudioTests(TestCase):
             ["KS0030", "Versión B", "", "12.00 USD", ""],
         ]
         excel_path = self._crear_excel_prueba(filas)
+        conflictos_temp = excel_path.parent / "conflictos.md"
 
         # 1. Primera importación real
-        call_command("importar_catalogo_keyestudio", excel=str(excel_path))
+        call_command(
+            "importar_catalogo_keyestudio",
+            excel=str(excel_path),
+            registro_conflictos=str(conflictos_temp),
+        )
 
         # KS0010 y KS0020 creados; KS0030 excluido por conflicto
         self.assertEqual(Producto.objects.count(), 2)
@@ -140,7 +146,12 @@ class ImportadorKeyestudioTests(TestCase):
             ["KS0020", "Kit Arduino", "", "20.00 USD", ""],
         ]
         excel_path_v2 = self._crear_excel_prueba(filas_actualizadas)
-        call_command("importar_catalogo_keyestudio", excel=str(excel_path_v2), actualizar_costos=True)
+        call_command(
+            "importar_catalogo_keyestudio",
+            excel=str(excel_path_v2),
+            actualizar_costos=True,
+            registro_conflictos=str(conflictos_temp),
+        )
 
         # Recargar producto desde BD
         p1.refresh_from_db()
@@ -180,6 +191,7 @@ class ImportadorKeyestudioTests(TestCase):
             "importar_catalogo_keyestudio",
             excel=str(excel_path),
             imagenes=str(img_dir),
+            registro_conflictos=str(excel_path.parent / "conflictos.md"),
         )
 
         p_con_img = Producto.objects.get(sku_proveedor="KS0050")

@@ -153,8 +153,15 @@ class Producto(models.Model):
         TecnologiaCompatible,
         blank=True,
         related_name="productos",
-        verbose_name="Tecnologías Compatibles",
-        help_text="Plataformas microcontroladoras o computacionales compatibles."
+        verbose_name="Tecnologías Compatibles Propuestas",
+        help_text="Plataformas compatibles propuestas pedagógicamente para proyectos de aula."
+    )
+    tecnologias_verificadas = models.ManyToManyField(
+        TecnologiaCompatible,
+        blank=True,
+        related_name="productos_verificados",
+        verbose_name="Tecnologías Compatibles Verificadas",
+        help_text="Compatibilidad técnica respaldada explícitamente por el fabricante o evidencia registrada."
     )
     uso_educativo = models.TextField(
         blank=True,
@@ -186,6 +193,11 @@ class Producto(models.Model):
         blank=True,
         verbose_name="Descripción Pedagógica / Educativa",
         help_text="Texto explicativo para el profesor: qué es, para qué sirve y contexto de aplicación."
+    )
+    advertencia_uso = models.TextField(
+        blank=True,
+        verbose_name="Advertencia de Uso Educativo / Seguridad",
+        help_text="Advertencia de seguridad o condiciones pedagógicas de uso (voltaje, gases, fuego, uso médico, supervisión)."
     )
     unidad_compra = models.CharField(max_length=50, default="unidad", verbose_name="Unidad de Medida")
 
