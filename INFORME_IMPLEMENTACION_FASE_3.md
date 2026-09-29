@@ -150,7 +150,7 @@ Se ejecutó una auditoría automatizada integral comparando campo por campo [`CA
 * **Coincidencia de Categoría Pedagógica:** **100% (72/72)**.
 * **Coincidencia de Precios Sugeridos (CLP):** **100% (72/72)**.
 * **Coincidencia de Nivel de Dificultad:** **100% (72/72)**.
-* **Coincidencia de Unidad de Compra:** **100% (72/72)** (`unidad`).
+* **Coincidencia de Unidad de Compra:** **100% (72/72)** (coincidencia exacta por SKU, incluyendo productos individuales, packs y sets).
 * **Coincidencia de Aptitud para Kits:** **100% (72/72)**.
 * **Coincidencia de Estado de Curaduría:** **100% (72/72)** (`VALIDADO`).
 * **SKUs faltantes en el documento respecto a la base:** **0**.
@@ -178,6 +178,9 @@ EDUCOMPRA HUMM — AUDITORÍA DE CONSISTENCIA DEL CATÁLOGO CURADO FASE 3
   [✔] IoT y comunicación: 6/6
   [✔] Kits educativos iniciales: 3/3
   [✔] Herramientas y accesorios: 3/3
+• Coincidencia de unidad de compra:
+  ✔ 100% (72/72) coincidencia exacta por SKU
+    (60 individuales, 4 packs de 3/4 unidades, 8 sets de componentes y cables)
 • Productos con advertencia_uso: 11 (esperado: 11)
   ✔ KS0057 verificado como módulo de 2 relés.
   ✔ KS0049 verificado como sensor de humedad de suelo sin advertencia de fuente.

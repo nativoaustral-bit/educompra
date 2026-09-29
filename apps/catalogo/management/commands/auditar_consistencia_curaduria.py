@@ -36,6 +36,24 @@ class Command(BaseCommand):
         "49500005",
     }
 
+    # Unidades de compra canónicas según CATALOGO_CURADO_FASE_3.md (los no listados son 'unidad')
+    UNIDADES_ESPERADAS = {
+        # Packs
+        "KS0326": "pack (3 unidades)",
+        "KS0331": "pack (3 unidades)",
+        "KT0284": "pack (4 unidades)",
+        "MD0089": "pack (3 unidades)",
+        # Sets
+        "KS0140": "set (2 piezas)",
+        "KS0205": "set (3 piezas)",
+        "KS0219": "set (3 piezas)",
+        "KS0332": "set (3 piezas)",
+        "KS0389": "set (2 piezas)",
+        "KT0065": "set (120 cables)",
+        "KT0072": "set (120 cables)",
+        "MD0118": "set (2 piezas)",
+    }
+
     def handle(self, *args, **options):
         errores = []
         self.stdout.write("======================================================================")
@@ -86,7 +104,23 @@ class Command(BaseCommand):
             if actual != esperado:
                 errores.append(f"Categoría '{cat_nom}' tiene {actual} productos (esperado: {esperado}).")
 
-        # 7. Auditoría de advertencias de uso (advertencia_uso)
+        # 7. Coincidencia de unidad de compra individual por SKU (packs, sets y unidades)
+        discrepancias_unidad = []
+        for p in validados:
+            esperada = self.UNIDADES_ESPERADAS.get(p.sku_proveedor, "unidad")
+            if p.unidad_compra != esperada:
+                discrepancias_unidad.append(
+                    f"{p.sku_proveedor}: tiene unidad '{p.unidad_compra}' (esperado '{esperada}')"
+                )
+
+        if discrepancias_unidad:
+            errores.extend(discrepancias_unidad)
+        else:
+            self.stdout.write("• Coincidencia de unidad de compra:")
+            self.stdout.write("  ✔ 100% (72/72) coincidencia exacta por SKU")
+            self.stdout.write("    (60 individuales, 4 packs de 3/4 unidades, 8 sets de componentes y cables)")
+
+        # 8. Auditoría de advertencias de uso (advertencia_uso)
         con_adv = Producto.objects.filter(advertencia_uso__gt="")
         skus_con_adv = set(con_adv.values_list("sku_proveedor", flat=True))
         self.stdout.write(f"• Productos con advertencia_uso: {len(skus_con_adv)} (esperado: {len(self.SKUS_CON_ADVERTENCIA_ESPERADOS)})")
@@ -113,7 +147,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  ✔ KS0049 verificado como sensor de humedad de suelo sin advertencia de fuente.")
 
-        # 8. Separación entre compatibilidad verificada y propuesta
+        # 9. Separación entre compatibilidad verificada y propuesta
         sin_tec_verificada = []
         sin_tec_propuesta = []
         for p in validados:
