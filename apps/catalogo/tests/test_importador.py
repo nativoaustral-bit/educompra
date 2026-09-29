@@ -156,3 +156,40 @@ class ImportadorKeyestudioTests(TestCase):
         self.assertEqual(p1.categoria.nombre, "Sensores y Módulos")
         self.assertEqual(p1.especificacion_tecnica_neutral, "Sensor de temperatura digital con protocolo de comunicación 1-wire.")
         self.assertTrue(p1.publicado)
+
+    def test_asociacion_imagenes_y_placeholder(self):
+        """Verifica la vinculación física de imágenes, optimización y fallback a placeholder."""
+        from PIL import Image
+
+        temp_dir = Path(tempfile.mkdtemp())
+        img_dir = temp_dir / "imagenes"
+        img_dir.mkdir()
+
+        # Crear una imagen real de prueba para KS0050
+        test_img_path = img_dir / "KS0050.jpg"
+        img = Image.new("RGB", (200, 200), color="blue")
+        img.save(test_img_path)
+
+        filas = [
+            ["KS0050", "Módulo Bluetooth con imagen", "", "8.00 USD", ""],
+            ["KS0060", "Módulo WiFi sin imagen", "", "12.00 USD", ""],
+        ]
+        excel_path = self._crear_excel_prueba(filas)
+
+        call_command(
+            "importar_catalogo_keyestudio",
+            excel=str(excel_path),
+            imagenes=str(img_dir),
+        )
+
+        p_con_img = Producto.objects.get(sku_proveedor="KS0050")
+        self.assertEqual(p_con_img.imagenes.count(), 1)
+        img_record = p_con_img.imagenes.first()
+        self.assertTrue(img_record.es_principal)
+        self.assertIn("KS0050", img_record.archivo.name)
+        self.assertIn("/media/productos/KS0050", p_con_img.imagen_principal_url)
+
+        p_sin_img = Producto.objects.get(sku_proveedor="KS0060")
+        self.assertEqual(p_sin_img.imagenes.count(), 0)
+        self.assertEqual(p_sin_img.imagen_principal_url, "/static/img/placeholder_producto.svg")
+

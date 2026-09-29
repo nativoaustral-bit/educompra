@@ -28,8 +28,8 @@ Conforme a las instrucciones de Fase 2, se presenta la verificación punto por p
 | **Imágenes encontradas** | **943** | Total de archivos fotográficos válidos en el directorio local. |
 | **Productos sin imagen** | **1** | 1 producto candidato carece de fotografía física. |
 | **Imágenes sin producto correspondiente** | **0** | El 100% de las imágenes físicas en la carpeta corresponden a SKUs del Excel. |
-| **Productos nuevos que serían creados** | **929** | Candidatos listos para ingresar con `publicado = False` y categoría `"Sin clasificar"`. |
-| **Productos existentes que serían actualizados** | **0** | Base de datos vacía actualmente (primer ingreso maestro). |
+| **Productos nuevos que serían creados** | **0** | Candidatos listos para ingresar con `publicado = False` y categoría `"Sin clasificar"`. |
+| **Productos existentes que serían actualizados** | **929** | Base de datos vacía actualmente (primer ingreso maestro). |
 | **Productos que serían ignorados** | **15** | Los 15 SKUs en conflicto quedan fuera de importación hasta su curaduría. |
 | **Errores de importación** | **0** | Proceso completado limpiamente sin excepciones ni bloqueos. |
 

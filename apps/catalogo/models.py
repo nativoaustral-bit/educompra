@@ -180,6 +180,14 @@ class Producto(models.Model):
     def __str__(self):
         return f"{self.nombre_comercial} [{self.sku_humm}]"
 
+    @property
+    def imagen_principal_url(self):
+        """Retorna la URL de la imagen principal o el placeholder institucional si no tiene imagen."""
+        img = self.imagenes.filter(es_principal=True).first() or self.imagenes.first()
+        if img and img.archivo:
+            return img.archivo.url
+        return "/static/img/placeholder_producto.svg"
+
     def calcular_precios_sugeridos(self, config=None):
         """
         Calcula el costo internado y el precio referencial sugerido utilizando los parámetros

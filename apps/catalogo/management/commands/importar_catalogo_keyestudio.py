@@ -460,8 +460,9 @@ class Command(BaseCommand):
                             rel_media_path = f"productos/{dest_filename}"
                             ProductoImagen.objects.create(
                                 producto=prod,
-                                imagen=rel_media_path,
-                                es_portada=(idx == 0),
+                                archivo=rel_media_path,
+                                nombre_archivo_original=img_src.name,
+                                es_principal=(idx == 0),
                                 orden=idx,
                             )
                             imagenes_vinculadas_count += 1
@@ -469,6 +470,11 @@ class Command(BaseCommand):
         # 11. Generar Informe y Reporte Markdown
         sku_duplicados_total = len(duplicados_identicos) + len(duplicados_conflictivos)
         filas_validas_total = filas_totales_leidas - len(filas_sin_sku) - len(precios_no_interpretables)
+
+        # Generar siempre el registro persistente de conflictos si existen
+        conflictos_file_path = Path(settings.BASE_DIR) / "CONFLICTOS_CATALOGO_KEYESTUDIO.md"
+        self.generar_archivo_conflictos(duplicados_conflictivos, conflictos_file_path)
+        self.stdout.write(self.style.SUCCESS(f"✔ Registro de conflictos persistido en: {conflictos_file_path}"))
 
         resumen_texto = f"""
 ======================================================================
@@ -682,4 +688,70 @@ Los siguientes **{len(duplicados_identicos)} SKUs** corresponden a filas repetid
 
 **ESTADO ACTUAL:** Listo para revisión de Humm. La escritura real de los 929 productos candidatos queda en pausa hasta autorización expresa.
 """
+
+    def generar_archivo_conflictos(self, duplicados_conflictivos, file_path):
+        """
+        Genera el documento persistente CONFLICTOS_CATALOGO_KEYESTUDIO.md
+        con los SKUs conflictivos para revisión de Humm con el proveedor.
+        """
+        if not duplicados_conflictivos:
+            content = "# REGISTRO DE CONFLICTOS — CATÁLOGO KEYESTUDIO\n\n*No se detectaron conflictos.*\n"
+            file_path.write_text(content, encoding="utf-8")
+            return
+
+        tabla_resumen = (
+            "| SKU en Conflicto | Repeticiones | Filas Excel | Precios Registrados (USD) | Estado |\n"
+            "| :--- | :---: | :---: | :--- | :---: |\n"
+        )
+        for dup in duplicados_conflictivos:
+            precios = " / ".join(f"${d['precio_usd']}" for d in dup["detalles"])
+            filas_str = ", ".join(str(f) for f in dup["filas"])
+            tabla_resumen += f"| **`{dup['sku']}`** | {dup['repeticiones']} | {filas_str} | {precios} | `PENDIENTE_REVISION_PROVEEDOR` |\n"
+
+        detalles_md = ""
+        for dup in duplicados_conflictivos:
+            detalles_md += f"### Conflicto SKU: `{dup['sku']}`\n\n"
+            detalles_md += f"* **Estado:** `PENDIENTE_REVISION_PROVEEDOR`\n"
+            detalles_md += f"* **Repeticiones:** {dup['repeticiones']} registros en archivo maestro\n\n"
+            detalles_md += "| Fila Excel | Precio (USD) | Descripción en Archivo Proveedor | Miniatura | Imagen HD |\n"
+            detalles_md += "| :---: | :---: | :--- | :--- | :--- |\n"
+            for d in dup["detalles"]:
+                mini_txt = d.get("miniatura") or "*(vacía)*"
+                hd_txt = d.get("imagen_hd") or "*(no definida)*"
+                detalles_md += f"| Fila {d['fila']} | ${d['precio_usd']} | {d['descripcion']} | {mini_txt} | {hd_txt} |\n"
+            detalles_md += "\n"
+
+        content = f"""# REGISTRO DE CONFLICTOS DE PROVEEDOR — CATÁLOGO KEYESTUDIO
+## Plataforma EduCompra Humm (`educompra.humm.cl`)
+
+**Fecha de Detección:** {settings.TIME_ZONE}  
+**Estado General:** `PENDIENTE_REVISION_PROVEEDOR`  
+**Total SKUs Conflictivos:** {len(duplicados_conflictivos)} (involucrando {sum(d['repeticiones'] for d in duplicados_conflictivos)} filas en archivo maestro)  
+**Acción de Protección:** **EXCLUIDOS ESTRICTAMENTE DE IMPORTACIÓN A BASE DE DATOS** hasta resolución manual con Keyestudio.
+
+---
+
+## 1. Resumen de SKUs Conflictivos
+
+{tabla_resumen}
+
+---
+
+## 2. Detalle Exhaustivo Fila por Fila
+
+{detalles_md}
+
+---
+
+## 3. Protocolo de Resolución y Sincronización Futura
+
+1. **Blindaje de la Base de Datos:** Ninguno de estos {len(duplicados_conflictivos)} SKUs ha sido ingresado al catálogo de EduCompra para evitar precios inexactos o kits con componentes inconsistentes.
+2. **Procedimiento de Aclaración:** El equipo de Humm contrastará con Keyestudio si se trata de:
+   * Diferentes variantes de un mismo producto (ej: kit con placa de desarrollo vs sin placa);
+   * Reemplazo de códigos antiguos por nuevos;
+   * O error tipográfico en la planilla del fabricante.
+3. **Detección Automática en Nuevas Importaciones:** En la siguiente ejecución del importador, si el proveedor envía una planilla corregida donde estos SKUs ya no presenten disparidad, el sistema los detectará automáticamente como válidos o idénticos y habilitará su incorporación.
+"""
+        file_path.write_text(content, encoding="utf-8")
+
 
