@@ -180,6 +180,17 @@ class ProductoAdmin(admin.ModelAdmin):
             ),
             "description": "REGLA OBLIGATORIA: Sin marcas ni SKUs. Solo productos con estado VALIDADO_HUMM pueden emitir cotización formal."
         }),
+        ("Evidencia y Trazabilidad Técnica (Punto de Control Fase 3)", {
+            "fields": (
+                "fuente_tecnica",
+                "referencia_tecnica_url",
+                "fecha_revision_tecnica",
+                "responsable_revision_tecnica",
+                "observaciones_tecnicas",
+            ),
+            "classes": ("collapse",),
+            "description": "Registro de fuentes técnicas primarias y evidencia verificable para compra pública."
+        }),
         ("Costos y Precios Sugeridos", {
             "fields": (
                 "costo_proveedor_usd",

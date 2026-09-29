@@ -207,6 +207,34 @@ class Producto(models.Model):
         verbose_name="Criterios y Cláusula de Equivalencia Técnica"
     )
 
+    # Trazabilidad y Evidencia Técnica (Punto de Control Fase 3)
+    fuente_tecnica = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Fuente Técnica / Fabricante",
+        help_text="Hoja de datos, wiki oficial o manual del fabricante."
+    )
+    referencia_tecnica_url = models.URLField(
+        blank=True,
+        verbose_name="URL de Referencia Técnica",
+        help_text="Enlace a documentación técnica verificable."
+    )
+    fecha_revision_tecnica = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de Revisión Técnica"
+    )
+    responsable_revision_tecnica = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="Responsable de Validación Técnica"
+    )
+    observaciones_tecnicas = models.TextField(
+        blank=True,
+        verbose_name="Observaciones de Validación Técnica",
+        help_text="Evidencias, notas de laboratorio o pruebas físicas."
+    )
+
     # Costos y Precios Sugeridos
     costo_proveedor_usd = models.DecimalField(
         max_digits=10,
