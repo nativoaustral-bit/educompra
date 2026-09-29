@@ -1,4 +1,4 @@
-name: Deploy EduCompra to HostGator Production
+name: Deploy EduCompra to HostGator Production (Selective Deploy)
 
 on:
   push:
@@ -7,15 +7,69 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Despliegue en Servidor HostGator
+  test_and_deploy:
+    name: Test, Empaquetado Selectivo y Despliegue en HostGator
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Checkout Código
+      - name: 1. Checkout Código Canónico desde GitHub
         uses: actions/checkout@v4
 
-      - name: 2. Sincronizar Código y Reiniciar en HostGator
+      - name: 2. Configurar Python y Ejecutar Tests (Gate de Calidad)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 3. Instalar Dependencias de Test
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 4. Ejecutar Suite de Tests Automatizados
+        env:
+          SECRET_KEY: 'ci-temporary-testing-secret-key-not-for-prod'
+          ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
+          DEBUG: 'True'
+        run: |
+          python manage.py test
+
+      - name: 5. Construir Paquete de Despliegue Selectivo (Sin Docs, Sin Tests, Sin .git)
+        run: |
+          set -euo pipefail
+          rm -rf deploy_dist educompra_deploy.tar.gz
+          mkdir -p deploy_dist
+
+          # Copiar EXCLUSIVAMENTE los archivos necesarios para el runtime de Django
+          cp -r apps config templates static manage.py requirements.txt passenger_wsgi.py deploy_dist/
+
+          # Excluir explícitamente tests y archivos de compilación
+          find deploy_dist -type d -name "tests" -exec rm -rf {} +
+          find deploy_dist -type d -name "__pycache__" -exec rm -rf {} +
+          find deploy_dist -type f -name "*.pyc" -delete
+
+          # Empaquetar bundle limpio
+          tar -czf educompra_deploy.tar.gz -C deploy_dist .
+          echo "✔ Paquete limpio creado con éxito: $(ls -lh educompra_deploy.tar.gz | awk '{print $5}')"
+
+          # Verificar que no contenga Markdown, .git ni secretos
+          if tar -tf educompra_deploy.tar.gz | grep -E "(\.md$|\.git|\.env|db\.sqlite3)"; then
+            echo "❌ ERROR: El paquete contiene archivos no permitidos para producción." >&2
+            exit 1
+          fi
+          echo "✔ Verificación de exclusiones exitosa: 0 archivos Markdown, 0 .git, 0 .env, 0 SQLite."
+
+      - name: 6. Transferir Paquete Limpio a HostGator
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "educompra_deploy.tar.gz"
+          target: "/home1/paulocis/apps/educompra"
+
+      - name: 7. Ejecutar Despliegue Seguro y Reiniciar en HostGator
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -25,34 +79,78 @@ jobs:
           script: |
             set -euo pipefail
 
-            APP_DIR="/home1/paulocis/apps/educompra/app"
-            VENV_DIR="/home1/paulocis/apps/educompra/venv"
+            BASE_APP_DIR="/home1/paulocis/apps/educompra"
+            APP_DIR="${BASE_APP_DIR}/app"
+            DATA_DIR="${BASE_APP_DIR}/data"
+            MEDIA_DIR="${BASE_APP_DIR}/media"
+            BACKUPS_DIR="${BASE_APP_DIR}/backups"
+            SECRETS_DIR="${BASE_APP_DIR}/secrets"
+            VENV_DIR="${BASE_APP_DIR}/venv"
             SUBDOMAIN_DIR="/home1/paulocis/educompra.humm.cl"
-            SECRETS_DIR="/home1/paulocis/apps/educompra/secrets"
+            TARBALL="${BASE_APP_DIR}/educompra_deploy.tar.gz"
 
-            cd "$APP_DIR"
-            git fetch origin main
-            git reset --hard origin/main
+            echo "=== 1. ASEGURAR ESTRUCTURA PERSISTENTE FUERA DE APP ==="
+            mkdir -p "$DATA_DIR" "$MEDIA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR" "$APP_DIR"
+            chmod 700 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
 
-            # Instalar dependencias si hay cambios utilizando uv
-            /home1/paulocis/.local/bin/uv pip install -r requirements.txt --python "$VENV_DIR" --quiet
+            # Migración de seguridad inicial: si db.sqlite3 todavía estaba en APP_DIR y no en DATA_DIR, preservarla
+            if [ -f "${APP_DIR}/db.sqlite3" ] && [ ! -f "${DATA_DIR}/db.sqlite3" ]; then
+                echo "Protegiendo base de datos existente: migrando a DATA_DIR persistente..."
+                cp -p "${APP_DIR}/db.sqlite3" "${DATA_DIR}/db.sqlite3"
+            fi
 
-            # Exportar variables de entorno de producción
+            # Respaldo de seguridad previo al deploy si existe la base de datos
+            if [ -f "${DATA_DIR}/db.sqlite3" ]; then
+                echo "Generando snapshot de respaldo previo al despliegue..."
+                cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/pre_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
+            fi
+
+            echo "=== 2. LIMPIEZA DEL DIRECTORIO EJECUTABLE (APP_DIR) ==="
+            # Eliminar .git si existía de la arquitectura anterior
+            rm -rf "${APP_DIR}/.git"
+            # Limpiar archivos .md, reportes e historiales que no deben estar en producción
+            find "$APP_DIR" -maxdepth 2 -name "*.md" -delete 2>/dev/null || true
+            find "$APP_DIR" -maxdepth 2 -name "*.xlsx" -delete 2>/dev/null || true
+            find "$APP_DIR" -maxdepth 2 -name "*.csv" -delete 2>/dev/null || true
+
+            echo "=== 3. EXTRACCIÓN DEL PAQUETE LIMPIO ==="
+            tar -xzf "$TARBALL" -C "$APP_DIR"
+            rm -f "$TARBALL"
+
+            # Eliminar explícitamente cualquier residuo no ejecutable que pudiera haber quedado
+            rm -rf "${APP_DIR}/tests" "${APP_DIR}/data_import" "${APP_DIR}/scratch"
+
+            echo "=== 4. INSTALACIÓN DE DEPENDENCIAS CON UV ==="
+            /home1/paulocis/.local/bin/uv pip install -r "${APP_DIR}/requirements.txt" --python "$VENV_DIR" --quiet
+
+            echo "=== 5. VARIABLES DE ENTORNO Y MIGRACIONES ==="
             set -a
-            source "${SECRETS_DIR}/.env"
+            if [ -f "${SECRETS_DIR}/.env" ]; then
+                source "${SECRETS_DIR}/.env"
+            fi
+            # Garantizar que DB_NAME y MEDIA_ROOT apunten a los directorios persistentes
+            export DB_NAME="${DATA_DIR}/db.sqlite3"
+            export MEDIA_ROOT="${MEDIA_DIR}"
             set +a
 
-            # Ejecutar migraciones de base de datos
+            cd "$APP_DIR"
             "${VENV_DIR}/bin/python" manage.py migrate --noinput
-
-            # Recolectar archivos estáticos
             "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
 
-            # Reiniciar Phusion Passenger en HostGator
+            echo "=== 6. SINCRONIZAR SUBDOMAIN DOCUMENTROOT ==="
+            # Asegurar que passenger_wsgi.py esté en el DocumentRoot de HostGator
+            cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+            # Limpiar cualquier residuo de .md, .git o .env del DocumentRoot público
+            rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
+            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
+            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.sqlite3" -delete 2>/dev/null || true
+
+            # Reiniciar Phusion Passenger
             mkdir -p "${SUBDOMAIN_DIR}/tmp"
             touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
+            echo "✔ Despliegue completado y Passenger reiniciado con éxito."
 
-      - name: 3. Comprobación de Salud Web (Smoke Test)
+      - name: 8. Comprobación de Salud Web (Smoke Test)
         run: |
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/health/)
           if [ "$HTTP_STATUS" != "200" ]; then
@@ -60,3 +158,37 @@ jobs:
             exit 1
           fi
           echo "✔ EduCompra en producción responde correctamente: HTTP $HTTP_STATUS"
+
+      - name: 9. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
+        run: |
+          # 1. Comprobar que ningún reporte Markdown esté expuesto públicamente
+          STATUS_MD=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/INFORME_ACTIVACION_FASE_4B.md)
+          if [ "$STATUS_MD" = "200" ]; then
+            echo "❌ ALERTA DE SEGURIDAD: INFORME_ACTIVACION_FASE_4B.md está accesible públicamente (HTTP $STATUS_MD)." >&2
+            exit 1
+          fi
+          echo "✔ Markdown privado no expuesto: HTTP $STATUS_MD (esperado != 200)"
+
+          # 2. Comprobar que .git no esté expuesto públicamente
+          STATUS_GIT=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/.git/HEAD)
+          if [ "$STATUS_GIT" = "200" ]; then
+            echo "❌ ALERTA DE SEGURIDAD: .git/HEAD está accesible públicamente (HTTP $STATUS_GIT)." >&2
+            exit 1
+          fi
+          echo "✔ .git no expuesto: HTTP $STATUS_GIT (esperado != 200)"
+
+          # 3. Comprobar que .env no esté expuesto públicamente
+          STATUS_ENV=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/.env)
+          if [ "$STATUS_ENV" = "200" ]; then
+            echo "❌ ALERTA DE SEGURIDAD: .env está accesible públicamente (HTTP $STATUS_ENV)." >&2
+            exit 1
+          fi
+          echo "✔ .env no expuesto: HTTP $STATUS_ENV (esperado != 200)"
+
+          # 4. Comprobar que la base SQLite no esté en DocumentRoot
+          STATUS_DB=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/db.sqlite3)
+          if [ "$STATUS_DB" = "200" ]; then
+            echo "❌ ALERTA DE SEGURIDAD: db.sqlite3 está accesible públicamente (HTTP $STATUS_DB)." >&2
+            exit 1
+          fi
+          echo "✔ SQLite no expuesta: HTTP $STATUS_DB (esperado != 200)"

@@ -19,6 +19,12 @@ if os.path.exists(env_file):
 elif os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
     load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
+# Asegurar rutas persistentes en HostGator
+if "DB_NAME" not in os.environ and os.path.exists("/home1/paulocis/apps/educompra/data"):
+    os.environ["DB_NAME"] = "/home1/paulocis/apps/educompra/data/db.sqlite3"
+if "MEDIA_ROOT" not in os.environ and os.path.exists("/home1/paulocis/apps/educompra/media"):
+    os.environ["MEDIA_ROOT"] = "/home1/paulocis/apps/educompra/media"
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 from config.wsgi import application as _application

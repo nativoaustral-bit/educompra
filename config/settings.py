@@ -41,7 +41,7 @@ if DJANGO_ENV == "production":
     DEBUG = False
 
 # Hosts autorizados
-allowed_hosts_raw = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,educompra.humm.cl")
+allowed_hosts_raw = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,educompra.humm.cl")
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_raw.split(",") if host.strip()]
 
 # Orígenes confiables para CSRF en producción
@@ -115,6 +115,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.cotizaciones.context_processors.canasta_context",
             ],
         },
     },
@@ -151,14 +152,19 @@ if DB_ENGINE == "django.db.backends.mysql":
         }
     }
 else:
-    # SQLite para MVP: Ubicación configurable fuera del document root con timeout optimizado
-    db_name_str = os.getenv("DB_NAME", "db.sqlite3")
-    if os.path.isabs(db_name_str):
-        sqlite_db_path = Path(db_name_str)
+    # SQLite para MVP: Ubicación persistente fuera del document root y del código desplegado
+    db_name_str = os.getenv("DB_NAME", "").strip()
+    if db_name_str:
+        sqlite_db_path = Path(db_name_str) if os.path.isabs(db_name_str) else BASE_DIR / db_name_str
     else:
-        sqlite_db_path = BASE_DIR / db_name_str
+        # En servidor HostGator usar directorio persistente fuera del árbol de despliegue
+        server_data_db = Path("/home1/paulocis/apps/educompra/data/db.sqlite3")
+        if server_data_db.parent.exists():
+            sqlite_db_path = server_data_db
+        else:
+            sqlite_db_path = BASE_DIR / "db.sqlite3"
 
-    # Asegurar que el directorio de datos exista
+    # Asegurar que el directorio contenedor exista
     sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
 
     DATABASES = {
@@ -200,7 +206,15 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.getenv("STATIC_ROOT")) if os.getenv("STATIC_ROOT") else BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT")) if os.getenv("MEDIA_ROOT") else BASE_DIR / "media"
+media_root_env = os.getenv("MEDIA_ROOT", "").strip()
+if media_root_env:
+    MEDIA_ROOT = Path(media_root_env)
+else:
+    server_media = Path("/home1/paulocis/apps/educompra/media")
+    if server_media.parent.exists():
+        MEDIA_ROOT = server_media
+    else:
+        MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -210,3 +224,12 @@ TEST_RUNNER = "apps.core.runner.EduCompraTestRunner"
 # Permisos seguros para archivos multimedia creados por Django
 FILE_UPLOAD_PERMISSIONS = 0o644
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
+
+# ==============================================================================
+# CONFIGURACIÓN DE CORREO ELECTRÓNICO (NOTIFICACIONES DE COTIZACIÓN)
+# ==============================================================================
+EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EduCompra Humm <contacto@humm.cl>")
+HUMM_COTIZACIONES_EMAIL = os.getenv("HUMM_COTIZACIONES_EMAIL", os.getenv("NOTIFICACIONES_ADMIN_EMAIL", "contacto@humm.cl"))
+NOTIFICACIONES_ADMIN_EMAIL = HUMM_COTIZACIONES_EMAIL
+

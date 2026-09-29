@@ -30,19 +30,29 @@ venv/
 env/
 ENV/
 
-# Django files
+# Django & Database files (NEVER commit database or media)
 *.log
 local_settings.py
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.db
+data/
 db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
 
-# Environment secrets
+# Environment secrets & credentials (STRICTLY PROHIBITED)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 secrets/
+*.pem
+*.key
+*.cert
+*.id_rsa
+*.id_ed25519
 
 # IDE / Editor files
 .vscode/
@@ -51,8 +61,17 @@ secrets/
 *.sublime-workspace
 .DS_Store
 
-# Temporary and import files
+# Temporary, data imports, Excel, and backups
 tmp/
 *.tmp
+temp/
+scratch/
 data_import/
 backups/
+*.sql
+*.tar.gz
+*.zip
+deploy_dist/
+*.xlsx
+*.xls
+*.csv
