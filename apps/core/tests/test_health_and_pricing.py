@@ -1,9 +1,10 @@
 from decimal import Decimal
 from unittest.mock import patch
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from apps.core.models import ConfiguracionPricing
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class HealthCheckAndPricingTests(TestCase):
     def setUp(self):
         self.client = Client()
