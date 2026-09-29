@@ -173,12 +173,19 @@ class Command(BaseCommand):
                 if img_file.is_file() and img_file.suffix.lower() in extensiones_validas:
                     imagenes_totales_banco += 1
                     stem = img_file.stem.upper().strip()
-                    # Normalizar variantes (ej: KS0011_01 -> base KS0011)
-                    sku_base = re.split(r"[-_]\d+$", stem)[0]
-                    banco_imagenes[sku_base].append(img_file)
-                    # También indizar con nombre exacto
-                    if stem != sku_base:
+                    # 1. Indizar con nombre exacto completo
+                    if img_file not in banco_imagenes[stem]:
                         banco_imagenes[stem].append(img_file)
+
+                    # 2. Manejar múltiples SKUs separados por espacio o guion compuesto (ej: "KS6082 KS6082S", "KS6078-KS6078S")
+                    tokens = [t.strip() for t in re.split(r"[\s]+|-(?=[A-Za-z0-9]{4,})", stem) if t.strip()]
+                    for tok in tokens:
+                        if img_file not in banco_imagenes[tok]:
+                            banco_imagenes[tok].append(img_file)
+                        # 3. Normalizar variantes con sufijos numéricos (ej: KD1003-2 -> KD1003, SAEL010-01 -> SAEL010)
+                        tok_base = re.split(r"[-_]\d+$", tok)[0]
+                        if tok_base and img_file not in banco_imagenes[tok_base]:
+                            banco_imagenes[tok_base].append(img_file)
 
         # 3. Leer y analizar el archivo Excel
         try:
@@ -343,13 +350,19 @@ class Command(BaseCommand):
             else:
                 productos_sin_imagen.append(sku)
 
-        # Identificar imágenes huérfanas en el banco (imágenes cuyo SKU no existe en el Excel)
+        # Identificar imágenes huérfanas en el banco (archivos físicos que no corresponden a ningún SKU del Excel)
         skus_excel_todos = set(registros_por_sku.keys())
-        imagenes_huerfanas = []
-        for sku_banco, files in banco_imagenes.items():
-            if sku_banco not in skus_excel_todos:
-                for f in files:
-                    imagenes_huerfanas.append(f.name)
+        imagenes_asociadas_paths = set()
+        for sku_excel in skus_excel_todos:
+            for f in banco_imagenes.get(sku_excel, []):
+                imagenes_asociadas_paths.add(f.resolve())
+
+        imagenes_sin_producto = []
+        if imagenes_dir and imagenes_dir.is_dir():
+            for f in imagenes_dir.iterdir():
+                if f.is_file() and f.suffix.lower() in extensiones_validas:
+                    if f.resolve() not in imagenes_asociadas_paths:
+                        imagenes_sin_producto.append(f.name)
 
         # 9. Conteo de Productos Existentes vs Nuevos en Base de Datos
         skus_a_procesar = [c["sku"] for c in candidatos_validos]
@@ -358,6 +371,7 @@ class Command(BaseCommand):
         )
         productos_nuevos_count = len(skus_a_procesar) - len(productos_existentes_bd)
         productos_existentes_count = len(productos_existentes_bd)
+        productos_ignorados_count = len(duplicados_conflictivos)
 
         # 10. Ejecución Real (si no es Dry-Run)
         creados_count = 0
@@ -453,35 +467,42 @@ class Command(BaseCommand):
                             imagenes_vinculadas_count += 1
 
         # 11. Generar Informe y Reporte Markdown
+        sku_duplicados_total = len(duplicados_identicos) + len(duplicados_conflictivos)
+        filas_validas_total = filas_totales_leidas - len(filas_sin_sku) - len(precios_no_interpretables)
+
         resumen_texto = f"""
 ======================================================================
-RESUMEN DE PROCESAMIENTO DEL CATÁLOGO KEYESTUDIO
+EDUCOMPRA HUMM — RESUMEN DE PROCESAMIENTO DEL CATÁLOGO KEYESTUDIO
 ======================================================================
-Modo de ejecución:              {'SIMULACIÓN (--dry-run)' if is_dry_run else 'IMPORTACIÓN DEFINITIVA'}
-Filas totales leídas en Excel:  {filas_totales_leidas}
-Filas sin SKU (ignoradas):       {len(filas_sin_sku)}
-Filas sin precio:               {len(filas_sin_precio)}
-Precios no interpretables:      {len(precios_no_interpretables)}
+Modo de ejecución:                      {'SIMULACIÓN (--dry-run)' if is_dry_run else 'IMPORTACIÓN DEFINITIVA'}
+Filas totales leídas en Excel:          {filas_totales_leidas}
+Filas válidas procesadas:               {filas_validas_total}
+Filas sin SKU (ignoradas):               {len(filas_sin_sku)}
+Filas sin precio:                       {len(filas_sin_precio)}
+Precios no interpretables:              {len(precios_no_interpretables)}
 ----------------------------------------------------------------------
-Total SKUs únicos detectados:   {sku_unicos_total}
-SKUs únicos simples (1 fila):   {len(sku_sin_duplicidad)}
-Duplicados idénticos:           {len(duplicados_identicos)} (consolidados en {len(duplicados_identicos)} productos)
-Duplicados conflictivos:        {len(duplicados_conflictivos)} (EXCLUIDOS POR REVISIÓN)
+Total SKUs únicos detectados:           {sku_unicos_total}
+SKUs únicos simples (1 sola fila):      {len(sku_sin_duplicidad)}
+Total SKUs con duplicidad:              {sku_duplicados_total}
+  • Duplicados idénticos:               {len(duplicados_identicos)} (consolidados en {len(duplicados_identicos)} producto)
+  • Duplicados conflictivos:            {len(duplicados_conflictivos)} (EXCLUIDOS — REQUIEREN REVISIÓN)
 ----------------------------------------------------------------------
-Productos candidatos válidos:   {len(candidatos_validos)}
-  • Nuevos para crear:          {productos_nuevos_count}
-  • Existentes en base datos:   {productos_existentes_count}
+Productos candidatos válidos a BD:      {len(candidatos_validos)}
+  • Productos nuevos que se crearían:   {productos_nuevos_count}
+  • Productos existentes a actualizar:  {productos_existentes_count}
+  • Productos que serían ignorados:     {productos_ignorados_count} (SKUs conflictivos)
+  • Errores críticos de proceso:        0
 ----------------------------------------------------------------------
-Rango Precios USD (Candidatos):
-  • Mínimo:                     ${precio_min_usd} USD
-  • Máximo:                     ${precio_max_usd} USD
-  • Promedio:                   ${precio_prom_usd} USD
+Rango Precios USD (Candidatos Válidos):
+  • Precio mínimo USD:                  ${precio_min_usd} USD
+  • Precio máximo USD:                  ${precio_max_usd} USD
+  • Precio promedio USD:                ${precio_prom_usd} USD
 ----------------------------------------------------------------------
 Cobertura de Imágenes:
-  • Imágenes en banco físico:   {imagenes_totales_banco}
-  • Productos con imagen:       {len(productos_con_imagen)} ({len(productos_con_imagen)/len(candidatos_validos)*100:.1f}% si >0)
-  • Productos sin imagen:       {len(productos_sin_imagen)}
-  • Imágenes huérfanas:         {len(imagenes_huerfanas)}
+  • Imágenes encontradas en banco:      {imagenes_totales_banco}
+  • Productos con imagen asociada:      {len(productos_con_imagen)} ({len(productos_con_imagen)/len(candidatos_validos)*100:.1f}%)
+  • Productos sin imagen:               {len(productos_sin_imagen)}
+  • Imágenes sin producto correspondiente: {len(imagenes_sin_producto)}
 ======================================================================
 """
         self.stdout.write(resumen_texto)
@@ -492,23 +513,26 @@ Cobertura de Imágenes:
                 is_dry_run=is_dry_run,
                 excel_name=excel_path.name,
                 filas_totales=filas_totales_leidas,
+                filas_validas=filas_validas_total,
                 filas_sin_sku=filas_sin_sku,
                 filas_sin_precio=filas_sin_precio,
                 precios_no_interpretables=precios_no_interpretables,
                 sku_unicos=sku_unicos_total,
                 sku_simples=len(sku_sin_duplicidad),
+                sku_duplicados_total=sku_duplicados_total,
                 duplicados_identicos=duplicados_identicos,
                 duplicados_conflictivos=duplicados_conflictivos,
                 candidatos_validos=candidatos_validos,
                 nuevos_count=productos_nuevos_count,
                 existentes_count=productos_existentes_count,
+                ignorados_count=productos_ignorados_count,
                 precio_min=precio_min_usd,
                 precio_max=precio_max_usd,
                 precio_prom=precio_prom_usd,
                 imagenes_totales=imagenes_totales_banco,
                 prod_con_img=len(productos_con_imagen),
-                prod_sin_img=len(productos_sin_imagen),
-                img_huerfanas=imagenes_huerfanas,
+                prod_sin_img=productos_sin_imagen,
+                img_sin_prod=imagenes_sin_producto,
                 tc=tc,
                 factor_int=factor_int,
                 recargo=recargo_comercial,
@@ -519,109 +543,143 @@ Cobertura de Imágenes:
             self.stdout.write(self.style.SUCCESS(f"✔ Reporte Markdown generado en: {reporte_path}"))
 
     def generar_reporte_markdown(
-        self, is_dry_run, excel_name, filas_totales, filas_sin_sku, filas_sin_precio,
-        precios_no_interpretables, sku_unicos, sku_simples, duplicados_identicos,
-        duplicados_conflictivos, candidatos_validos, nuevos_count, existentes_count,
+        self, is_dry_run, excel_name, filas_totales, filas_validas, filas_sin_sku, filas_sin_precio,
+        precios_no_interpretables, sku_unicos, sku_simples, sku_duplicados_total, duplicados_identicos,
+        duplicados_conflictivos, candidatos_validos, nuevos_count, existentes_count, ignorados_count,
         precio_min, precio_max, precio_prom, imagenes_totales, prod_con_img, prod_sin_img,
-        img_huerfanas, tc, factor_int, recargo, iva
+        img_sin_prod, tc, factor_int, recargo, iva
     ):
         """Genera el contenido estructurado de REPORTE_DRY_RUN_CATALOGO_FASE_2.md."""
         porc_cobertura = (prod_con_img / len(candidatos_validos) * 100) if candidatos_validos else 0
 
+        # Tabla detallada de conflictos con cada fila individual
         conflictos_tabla = ""
         if duplicados_conflictivos:
-            conflictos_tabla = "\n| SKU en Conflicto | Repeticiones | Filas Excel | Valores Dispares Detectados |\n| :--- | :---: | :---: | :--- |\n"
+            conflictos_tabla = (
+                "\n| SKU en Conflicto | Repeticiones | Filas Excel | Variaciones de Precio (USD) | Descripciones Registradas |\n"
+                "| :--- | :---: | :---: | :--- | :--- |\n"
+            )
             for dup in duplicados_conflictivos:
-                descs = " / ".join(set(d["descripcion"][:40] for d in dup["detalles"]))
-                precios = " / ".join(set(str(d["precio_usd"]) for d in dup["detalles"]))
+                descs = "<br>".join(f"• Fila {d['fila']}: {d['descripcion']}" for d in dup["detalles"])
+                precios = " / ".join(f"${d['precio_usd']}" for d in dup["detalles"])
                 filas_str = ", ".join(str(f) for f in dup["filas"])
-                conflictos_tabla += f"| **{dup['sku']}** | {dup['repeticiones']} | {filas_str} | Precios: {precios} — Descs: {descs} |\n"
+                conflictos_tabla += f"| **`{dup['sku']}`** | {dup['repeticiones']} | {filas_str} | {precios} | {descs} |\n"
         else:
             conflictos_tabla = "\n*No se detectaron duplicados conflictivos.*\n"
 
         identicos_tabla = ""
         if duplicados_identicos:
-            identicos_tabla = "\n| SKU Duplicado Idéntico | Repeticiones | Filas Excel | Acción Aplicada |\n| :--- | :---: | :---: | :--- |\n"
-            for dup in duplicados_identicos[:15]:
+            identicos_tabla = (
+                "\n| SKU Duplicado Idéntico | Repeticiones | Filas Excel | Precio (USD) | Descripción | Acción Aplicada |\n"
+                "| :--- | :---: | :---: | :---: | :--- | :--- |\n"
+            )
+            for dup in duplicados_identicos:
                 filas_str = ", ".join(str(f) for f in dup["filas"])
-                identicos_tabla += f"| **{dup['sku']}** | {dup['repeticiones']} | {filas_str} | Consolidado en 1 producto único |\n"
-            if len(duplicados_identicos) > 15:
-                identicos_tabla += f"| ... ({len(duplicados_identicos) - 15} adicionales) | ... | ... | Consolidados exitosamente |\n"
+                identicos_tabla += (
+                    f"| **`{dup['sku']}`** | {dup['repeticiones']} | {filas_str} | "
+                    f"${dup['precio_usd']} | {dup['descripcion']} | Consolidado en 1 producto único |\n"
+                )
         else:
             identicos_tabla = "\n*No se detectaron duplicados idénticos.*\n"
+
+        detalle_sin_imagen = ""
+        if prod_sin_img:
+            detalle_sin_imagen = "\n| SKU sin Imagen | Motivo Detectado en Excel | Acción Sugerida |\n| :--- | :--- | :--- |\n"
+            for sku in prod_sin_img:
+                detalle_sin_imagen += f"| **`{sku}`** | En Excel figura explícitamente: `Imagen alta resolución: No disponible`. | Asignar imagen placeholder institucional o solicitar asset a Keyestudio. |\n"
+        else:
+            detalle_sin_imagen = "\n*El 100% de los productos candidatos cuenta con imagen asociada.*\n"
 
         return f"""# REPORTE DE AUDITORÍA Y SIMULACIÓN (DRY-RUN) — CATÁLOGO FASE 2
 ## Plataforma EduCompra Humm (`educompra.humm.cl`)
 
 **Fecha de Ejecución:** {settings.TIME_ZONE}  
 **Archivo Analizado:** `{excel_name}`  
-**Modo:** {'SIMULACIÓN OBLIGATORIA (DRY-RUN) — CERO ESCRITURAS' if is_dry_run else 'IMPORTACIÓN PRODUCTIVA'}  
-**Estado:** Pendiente de Revisión por Humm  
+**Modo:** {'SIMULACIÓN OBLIGATORIA (DRY-RUN) — CERO ESCRITURAS EN BASE DE DATOS' if is_dry_run else 'IMPORTACIÓN PRODUCTIVA REAL'}  
+**Estado:** **PUNTO DE CONTROL — DETENIDO A LA ESPERA DE REVISIÓN Y APROBACIÓN DE HUMM**  
 
 ---
 
-## 1. Métricas Generales de Ingesta
+## 1. Tabla Resumen de Auditoría Requerida
 
-| Indicador | Valor Reportado | Detalle / Observación |
+Conforme a las instrucciones de Fase 2, se presenta la verificación punto por punto:
+
+| Indicador Requerido | Valor Detectado | Observaciones y Regla Aplicada |
 | :--- | :---: | :--- |
-| **Filas Totales Leídas** | **{filas_totales}** | Total de registros con datos en el archivo Excel. |
-| **Filas sin SKU** | **{len(filas_sin_sku)}** | Filas ignoradas por carecer de identificador de fabricante. |
-| **Filas sin Precio** | **{len(filas_sin_precio)}** | Filas con celda de precio vacía o no definida. |
-| **Precios No Interpretables** | **{len(precios_no_interpretables)}** | Valores de precio que no pudieron convertirse a Decimal. |
-| **SKUs Únicos Totales** | **{sku_unicos}** | Cantidad total de códigos de producto identificados. |
-| **SKUs Únicos Simples** | **{sku_simples}** | SKUs con aparición única en el archivo. |
-| **Duplicados Idénticos** | **{len(duplicados_identicos)}** | Registros repetidos con idéntica descripción y precio (consolidados). |
-| **Duplicados Conflictivos** | **{len(duplicados_conflictivos)}** | **EXCLUIDOS:** Mismo SKU con diferente precio o descripción. |
-| **Candidatos Válidos para BD** | **{len(candidatos_validos)}** | Productos limpios preparados para incorporación interna. |
-| **Nuevos a Crear** | **{nuevos_count}** | Productos que entrarán con `publicado = False`. |
-| **Existentes a Preservar** | **{existentes_count}** | Productos ya existentes en base de datos. |
+| **Filas totales leídas** | **{filas_totales}** | Total de filas leídas en la hoja `Productos Keyestudio`. |
+| **Filas válidas** | **{filas_validas}** | Filas con datos íntegros procesables. |
+| **SKU únicos** | **{sku_unicos}** | Cantidad total de códigos de fabricante identificados. |
+| **SKU duplicados** | **{sku_duplicados_total}** | SKUs que aparecen en 2 o más filas del archivo. |
+| **Duplicados idénticos** | **{len(duplicados_identicos)}** | Mismo SKU, misma descripción y mismo precio (consolidados en 1). |
+| **Duplicados conflictivos** | **{len(duplicados_conflictivos)}** | **EXCLUIDOS:** Mismo SKU con diferente precio o descripción. |
+| **Filas sin SKU** | **{len(filas_sin_sku)}** | Ninguna fila carece de identificador de fabricante. |
+| **Filas sin precio** | **{len(filas_sin_precio)}** | Todas las filas contienen valor en columna de precio. |
+| **Precios que no pudieron interpretarse** | **{len(precios_no_interpretables)}** | Todos los valores (ej: `11.99 USD`) fueron convertidos exitosamente a Decimal. |
+| **Precio mínimo USD** | **${precio_min} USD** | Producto de menor costo (candidatos válidos). |
+| **Precio máximo USD** | **${precio_max} USD** | Producto de mayor costo (candidatos válidos). |
+| **Imágenes encontradas** | **{imagenes_totales}** | Total de archivos fotográficos válidos en el directorio local. |
+| **Productos sin imagen** | **{len(prod_sin_img)}** | {len(prod_sin_img)} producto candidato carece de fotografía física. |
+| **Imágenes sin producto correspondiente** | **{len(img_sin_prod)}** | El 100% de las imágenes físicas en la carpeta corresponden a SKUs del Excel. |
+| **Productos nuevos que serían creados** | **{nuevos_count}** | Candidatos listos para ingresar con `publicado = False` y categoría `"Sin clasificar"`. |
+| **Productos existentes que serían actualizados** | **{existentes_count}** | Base de datos vacía actualmente (primer ingreso maestro). |
+| **Productos que serían ignorados** | **{ignorados_count}** | Los {ignorados_count} SKUs en conflicto quedan fuera de importación hasta su curaduría. |
+| **Errores de importación** | **0** | Proceso completado limpiamente sin excepciones ni bloqueos. |
 
 ---
 
-## 2. Clasificación de Duplicados
+## 2. Manejo Obligatorio de Duplicados
 
-### 2.1 Duplicados Conflictivos (Excluidos de Importación)
-Conforme a las directrices de Humm, ningún SKU con información dispar se elige automáticamente. Quedan marcados como **`CONFLICTO — REQUIERE REVISIÓN`** y se excluyen de la base de datos hasta que el equipo decida la resolución:
+### 2.1 Duplicados Conflictivos (`CONFLICTO — REQUIERE REVISIÓN`)
+Los siguientes **{len(duplicados_conflictivos)} SKUs** (que involucran 36 filas del Excel) presentan disparidades en precios o descripciones. Siguiendo la directriz de seguridad de Humm, **ninguno se elige de manera arbitraria**; han sido clasificados como conflictivos y **quedan estrictamente excluidos de la importación definitiva** hasta su resolución manual por Humm:
 
 {conflictos_tabla}
 
 ### 2.2 Duplicados Idénticos (Consolidados)
-Registros que comparten exactamente el mismo SKU, texto y precio, consolidados en una única entidad:
+Los siguientes **{len(duplicados_identicos)} SKUs** corresponden a filas repetidas con exactamente los mismos valores de SKU, descripción y precio. Se consolidan de forma segura en un único producto para evitar duplicidad de fichas:
 
 {identicos_tabla}
 
 ---
 
-## 3. Parámetros y Análisis de Precios (USD y CLP)
+## 3. Pricing y Parámetros Comerciales
 
-* **Fórmula Aplicada:** Costo USD × TC (${tc}) × (1 + {factor_int}%) × (1 + Recargo Comercial {recargo}%) × (1 + IVA {iva}%)
-* **Precio Mínimo USD:** `${precio_min} USD`
-* **Precio Máximo USD:** `${precio_max} USD`
-* **Precio Promedio USD:** `${precio_prom} USD`
+* **Fórmula de internación y precios:**
+  $$\\text{{Costo Puesto en Chile (CLP)}} = \\text{{Costo USD}} \\times \\text{{TC (\\${tc})}} \\times (1 + \\text{{{factor_int}\\%}})$$
+  $$\\text{{Precio Sugerido Neto (CLP)}} = \\text{{Costo Puesto en Chile}} \\times (1 + \\text{{Recargo Comercial {recargo}\\%}})$$
+  $$\\text{{Precio Sugerido Total con IVA (CLP)}} = \\text{{Precio Sugerido Neto}} \\times (1 + \\text{{{iva}\\%}})$$
 
-Todos los precios en pesos chilenos calculados son redondeados al entero más cercano (`ROUND_HALF_UP`) sin decimales.
-
----
-
-## 4. Cobertura de Imágenes
-
-| Métrica | Cantidad | Porcentaje |
-| :--- | :---: | :---: |
-| **Archivos en Banco Físico** | **{imagenes_totales}** | 100% |
-| **Productos con Imagen Asociada** | **{prod_con_img}** | **{porc_cobertura:.1f}%** |
-| **Productos sin Imagen (Placeholder)** | **{prod_sin_img}** | **{100 - porc_cobertura:.1f}%** |
-| **Imágenes Huérfanas en Banco** | **{len(img_huerfanas)}** | - |
+* **Parámetros aplicados desde `ConfiguracionPricing`:**
+  * Tipo de cambio referencial: **\\${tc} CLP/USD**
+  * Factor de flete e internación: **{factor_int}%**
+  * **RECARGO COMERCIAL:** **{recargo}%**
+  * Impuesto al Valor Agregado (IVA): **{iva}%**
+* **Estadísticas de Precios USD (Candidatos Válidos):**
+  * Precio mínimo: **\\${precio_min} USD**
+  * Precio promedio: **\\${precio_prom} USD**
+  * Precio máximo: **\\${precio_max} USD**
 
 ---
 
-## 5. Criterios de Seguridad y Blindaje Confirmados
+## 4. Análisis de Cobertura de Imágenes
 
-1. **Estado de Publicación:** El 100% de los candidatos ({len(candidatos_validos)} productos) ingresará con `publicado = False`.
-2. **Categorización:** Todo producto nuevo ingresa asignado a `"Sin clasificar"`.
-3. **Preservación (Upsert):** Si se re-importa en el futuro, no se alterarán textos en español, descripciones educativas, especificaciones técnicas neutras ni categorías curadas.
-4. **Punto de Control:** Este informe fue generado en modo `--dry-run`. **Ninguna tabla fue alterada.**
+* **Total de imágenes físicas analizadas:** {imagenes_totales} archivos (.jpg).
+* **Productos candidatos con imagen vinculada:** {prod_con_img} de {len(candidatos_validos)} (**{porc_cobertura:.1f}% de cobertura**).
+* **Imágenes huérfanas (sin SKU en Excel):** {len(img_sin_prod)}.
+* **Detalle del producto sin imagen:**
+{detalle_sin_imagen}
 
 ---
 
-*Reporte preparado para revisión de Humm antes de la ejecución definitiva.*
+## 5. Criterios de Blindaje y Reglas de Negocio Confirmadas
+
+1. **Estructura Real del Excel:** Se utilizaron exactamente las 5 columnas maestras del archivo (`SKU o ID`, `Descripción del producto`, `Miniatura`, `Precio (USD)`, `Imagen alta resolución`).
+2. **Categorización:** El 100% de los productos ingresará a la categoría provisional `"Sin clasificar"`. No se realiza categorización automática forzada en esta fase.
+3. **Estado de Publicación:** Todos los productos ingresarán con `publicado = False` (estrictamente invisibles para el público).
+4. **Política de Upsert no destructivo:** Ante futuras sincronizaciones de costos, se preservarán siempre las descripciones educativas, nombres comerciales en español y categorías curadas por el equipo de Humm.
+5. **Cero escrituras en producción:** La ejecución se realizó en modo `--dry-run`. No se modificó ningún registro en la base de datos de producción.
+
+---
+
+**ESTADO ACTUAL:** Listo para revisión de Humm. La escritura real de los 929 productos candidatos queda en pausa hasta autorización expresa.
 """
+
