@@ -98,7 +98,7 @@ En el servidor HostGator (`/home1/paulocis/apps/educompra/`), se implementa una 
 │           └── (Dependencias optimizadas administradas con uv)
 │
 └── educompra.humm.cl/     ← DOCUMENTROOT PÚBLICO (Apache / Phusion Passenger)
-    ├── passenger_wsgi.py  ← Punto de entrada WSGI sincronizado
+    ├── .htaccess          ← Directivas PassengerAppRoot apuntando a apps/educompra/app
     ├── static/            ← Archivos estáticos recolectados (collectstatic)
     └── tmp/
         └── restart.txt    ← Gatillador de reinicio de Passenger
@@ -136,7 +136,7 @@ Se reemplazó el antiguo mecanismo de `git reset --hard` por un flujo automatiza
    - Instala o actualiza paquetes con `/home1/paulocis/.local/bin/uv pip install`.
    - Aplica migraciones pendientes con `python manage.py migrate --noinput`.
    - Ejecuta `python manage.py collectstatic --noinput`.
-   - Sincroniza `passenger_wsgi.py` en el DocumentRoot público.
+   - Purga cualquier archivo `.py`, `.md`, `.git` o `.env` del DocumentRoot público `educompra.humm.cl`.
    - Purga residuos no públicos de `educompra.humm.cl`.
    - Reinicia la aplicación tocando `tmp/restart.txt`.
 5. **Auditoría Post-Despliegue (Smoke Test y No-Exposición):**

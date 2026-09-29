@@ -90,13 +90,16 @@ jobs:
             TARBALL="${BASE_APP_DIR}/educompra_deploy.tar.gz"
 
             echo "=== 1. ASEGURAR ESTRUCTURA PERSISTENTE FUERA DE APP ==="
+            chmod 755 "$BASE_APP_DIR"
             mkdir -p "$DATA_DIR" "$MEDIA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR" "$APP_DIR"
-            chmod 700 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
+            chmod 750 "$DATA_DIR" "$BACKUPS_DIR" "$SECRETS_DIR"
+            chmod 755 "$APP_DIR" "$MEDIA_DIR"
 
             # Migración de seguridad inicial: si db.sqlite3 todavía estaba en APP_DIR y no en DATA_DIR, preservarla
             if [ -f "${APP_DIR}/db.sqlite3" ] && [ ! -f "${DATA_DIR}/db.sqlite3" ]; then
                 echo "Protegiendo base de datos existente: migrando a DATA_DIR persistente..."
                 cp -p "${APP_DIR}/db.sqlite3" "${DATA_DIR}/db.sqlite3"
+                chmod 644 "${DATA_DIR}/db.sqlite3" || true
             fi
 
             # Respaldo de seguridad previo al deploy si existe la base de datos
@@ -116,6 +119,7 @@ jobs:
             echo "=== 3. EXTRACCIÓN DEL PAQUETE LIMPIO ==="
             tar -xzf "$TARBALL" -C "$APP_DIR"
             rm -f "$TARBALL"
+            chmod 755 "${APP_DIR}/passenger_wsgi.py"
 
             # Eliminar explícitamente cualquier residuo no ejecutable que pudiera haber quedado
             rm -rf "${APP_DIR}/tests" "${APP_DIR}/data_import" "${APP_DIR}/scratch"
@@ -137,17 +141,20 @@ jobs:
             "${VENV_DIR}/bin/python" manage.py migrate --noinput
             "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
 
-            echo "=== 6. SINCRONIZAR SUBDOMAIN DOCUMENTROOT ==="
-            # Asegurar que passenger_wsgi.py esté en el DocumentRoot de HostGator
-            cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
-            # Limpiar cualquier residuo de .md, .git o .env del DocumentRoot público
+            echo "=== 6. HIGIENE Y REINICIO DE SUBDOMAIN DOCUMENTROOT ==="
+            # El DocumentRoot público no debe tener ejecutables Python, Markdown, Git ni secretos
+            chmod 755 "$SUBDOMAIN_DIR"
+            rm -f "${SUBDOMAIN_DIR}/passenger_wsgi.py"
             rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
             find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
             find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.sqlite3" -delete 2>/dev/null || true
+            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.py" -delete 2>/dev/null || true
 
             # Reiniciar Phusion Passenger
             mkdir -p "${SUBDOMAIN_DIR}/tmp"
+            chmod 755 "${SUBDOMAIN_DIR}/tmp"
             touch "${SUBDOMAIN_DIR}/tmp/restart.txt"
+            chmod 644 "${SUBDOMAIN_DIR}/tmp/restart.txt"
             echo "✔ Despliegue completado y Passenger reiniciado con éxito."
 
       - name: 8. Comprobación de Salud Web (Smoke Test)
