@@ -1,0 +1,56 @@
+name: Admin Check DB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check_db:
+    name: Inspeccionar Bases de Datos en HostGator
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ejecutar Diagnóstico SSH en HostGator
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=60 "$SSH_USER@$SSH_HOST" 'bash -s' << 'EOF'
+            set -e
+            echo "=== 1. ARCHIVOS SQLITE EN HOSTGATOR ==="
+            ls -la /home1/paulocis/apps/educompra/data/ || true
+            ls -la /home1/paulocis/apps/educompra/backups/ || true
+            find /home1/paulocis/apps/educompra -name "*.sqlite3" -ls || true
+
+            echo "=== 2. ESTADÍSTICAS DJANGO CON DATA/DB.SQLITE3 ==="
+            cd /home1/paulocis/apps/educompra/app
+            set -a
+            if [ -f /home1/paulocis/apps/educompra/secrets/.env ]; then
+              source /home1/paulocis/apps/educompra/secrets/.env
+            fi
+            export DB_NAME="/home1/paulocis/apps/educompra/data/db.sqlite3"
+            set +a
+
+            /home1/paulocis/apps/educompra/venv/bin/python manage.py shell << 'PYEOF'
+import os
+from django.db.models import Count
+from apps.catalogo.models import Producto, Categoria
+
+print("DB_NAME activa:", os.environ.get("DB_NAME"))
+total = Producto.objects.count()
+print(f"Total Producto: {total}")
+print(f"activo=True: {Producto.objects.filter(activo=True).count()}")
+print(f"estado_curaduria='VALIDADO': {Producto.objects.filter(estado_curaduria='VALIDADO').count()}")
+print(f"publicado=True: {Producto.objects.filter(publicado=True).count()}")
+print(f"publicado=False: {Producto.objects.filter(publicado=False).count()}")
+print(f"Desglose por estado_curaduria: {list(Producto.objects.values('estado_curaduria').annotate(total=Count('id')))}")
+print(f"Categorías activas: {Categoria.objects.filter(activa=True).count()}")
+PYEOF
+          EOF
