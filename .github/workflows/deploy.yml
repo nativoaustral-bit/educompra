@@ -142,13 +142,17 @@ jobs:
             "${VENV_DIR}/bin/python" manage.py migrate --noinput
             "${VENV_DIR}/bin/python" manage.py collectstatic --noinput
 
-            # Higiene estricta de DocumentRoot público: sin Python, sin Markdown, sin Git, sin SQLite
+            # Sincronizar passenger_wsgi.py en DocumentRoot con permisos 0755 (requerido por Apache suEXEC)
+            cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+            chmod 755 "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+
+            # Higiene estricta de DocumentRoot público: sin Markdown, sin Git, sin .env, sin SQLite
             chmod 755 "$SUBDOMAIN_DIR"
-            rm -f "${SUBDOMAIN_DIR}/passenger_wsgi.py"
             rm -rf "${SUBDOMAIN_DIR}/.git" "${SUBDOMAIN_DIR}/.env"
             find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
             find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.sqlite3" -delete 2>/dev/null || true
-            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.py" -delete 2>/dev/null || true
+            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.xlsx" -delete 2>/dev/null || true
+            find "$SUBDOMAIN_DIR" -maxdepth 1 -name "*.csv" -delete 2>/dev/null || true
 
             # Reiniciar Phusion Passenger
             mkdir -p "${SUBDOMAIN_DIR}/tmp"

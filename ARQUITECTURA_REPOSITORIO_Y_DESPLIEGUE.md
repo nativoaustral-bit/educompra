@@ -98,7 +98,7 @@ En el servidor HostGator (`/home1/paulocis/apps/educompra/`), se implementa una 
 │           └── (Dependencias optimizadas administradas con uv)
 │
 └── educompra.humm.cl/     ← DOCUMENTROOT PÚBLICO (Apache / Phusion Passenger)
-    ├── .htaccess          ← Directivas PassengerAppRoot apuntando a apps/educompra/app
+    ├── passenger_wsgi.py  ← Punto de entrada WSGI sincronizado (permisos 0755 requeridos por suEXEC)
     ├── static/            ← Archivos estáticos recolectados (collectstatic)
     └── tmp/
         └── restart.txt    ← Gatillador de reinicio de Passenger
@@ -126,17 +126,16 @@ Se reemplazó el antiguo mecanismo de `git reset --hard` por un flujo automatiza
    - Purga directorios `tests/`, `__pycache__/` y archivos `.pyc`.
    - Empaqueta el artefacto en `educompra_deploy.tar.gz`.
    - Ejecuta una aserción interna: **0 archivos `.md`, 0 carpetas `.git`, 0 archivos `.env`, 0 bases SQLite**.
-3. **Transferencia Segura (SCP):**
-   - Transfiere `educompra_deploy.tar.gz` a `/home1/paulocis/apps/educompra/` mediante `appleboy/scp-action`.
-4. **Despliegue y Activación Remota (SSH):**
-   - Crea y verifica los directorios persistentes (`data/`, `media/`, `backups/`, `secrets/`).
-   - Si existe una base de datos activa, genera un snapshot de respaldo preventivo en `backups/`.
-   - Extrae el paquete limpio dentro de `app/`.
-   - Elimina el archivo tarball temporal.
+3. **Despliegue Atómico y Seguro en HostGator (SSH):**
+   - Abre un canal SSH seguro y comprueba directorios persistentes (`data/`, `media/`, `backups/`, `secrets/`).
+   - Genera snapshot de respaldo preventivo en `backups/`.
+   - Transmite vía streaming el paquete limpio directamente a `tar -xzf - -C app/` sin guardar archivos intermedios.
    - Instala o actualiza paquetes con `/home1/paulocis/.local/bin/uv pip install`.
-   - Aplica migraciones pendientes con `python manage.py migrate --noinput`.
+   - Aplica migraciones con `python manage.py migrate --noinput`.
    - Ejecuta `python manage.py collectstatic --noinput`.
-   - Purga cualquier archivo `.py`, `.md`, `.git` o `.env` del DocumentRoot público `educompra.humm.cl`.
+   - Sincroniza `passenger_wsgi.py` con permisos `0755` en `educompra.humm.cl`.
+   - Purga residuos no públicos de `educompra.humm.cl` (`.md`, `.git`, `.env`, `.sqlite3`).
+   - Reinicia la aplicación tocando `tmp/restart.txt`.
    - Purga residuos no públicos de `educompra.humm.cl`.
    - Reinicia la aplicación tocando `tmp/restart.txt`.
 5. **Auditoría Post-Despliegue (Smoke Test y No-Exposición):**
