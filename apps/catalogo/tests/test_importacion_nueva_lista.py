@@ -199,3 +199,40 @@ class ImportacionNuevaListaTestCase(TestCase):
         self.assertEqual(tramos.count(), 4)
         self.assertEqual(tramos[0].precio_usd, Decimal("29.91"))
         self.assertEqual(tramos[3].precio_usd, Decimal("26.92"))
+
+    def test_dry_run_estrictamente_read_only_sin_dependencias(self):
+        # Asegurar base limpia sin Proveedor, Categoría, Producto ni PrecioProveedorTramo
+        Producto.objects.all().delete()
+        PrecioProveedorTramo.objects.all().delete()
+        Proveedor.objects.all().delete()
+        Categoria.objects.all().delete()
+
+        prov_count_inicial = Proveedor.objects.count()
+        cat_count_inicial = Categoria.objects.count()
+        prod_count_inicial = Producto.objects.count()
+        tramos_count_inicial = PrecioProveedorTramo.objects.count()
+
+        filas = [
+            ["HOT PRODUCTS", None, None, None, None, None, None, None],
+            ["Image", "SKU", "Product Name", "Features", "Q1-9", "Q10-49", "Q50-100", "Q101-300"],
+            [None, "KS4050", "Environment Monitoring Learning Kit", "* Sensor kit", 39.88, 37.22, 35.89, 34.56],
+        ]
+        path = self._crear_excel_mock(filas)
+
+        res = ImportacionCatalogoService.procesar_catalogo(
+            excel_path=path,
+            is_dry_run=True,
+            skus_filtro=["KS4050"]
+        )
+
+        # 1. El reporte debe reflejar la simulación y reportar dependencias faltantes
+        self.assertTrue(res["is_dry_run"])
+        self.assertEqual(res["estado_dependencias"], "DEPENDENCIA_FALTANTE")
+        self.assertTrue(len(res["dependencias_faltantes"]) >= 2)
+
+        # 2. Las tablas de negocio NO deben haberse alterado en lo absoluto (100% READ-ONLY)
+        self.assertEqual(Proveedor.objects.count(), prov_count_inicial)
+        self.assertEqual(Categoria.objects.count(), cat_count_inicial)
+        self.assertEqual(Producto.objects.count(), prod_count_inicial)
+        self.assertEqual(PrecioProveedorTramo.objects.count(), tramos_count_inicial)
+

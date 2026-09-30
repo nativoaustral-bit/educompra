@@ -147,49 +147,6 @@ class ImportacionCatalogoService:
 
         return destino
 
-    @classmethod
-    def procesar_catalogo(cls, excel_path, imagenes_dir=None, is_dry_run=True,
-                          actualizar_costos=True, limite=0, usuario=None, lote=None, request=None):
-        """
-        Ejecuta el procesamiento integral del catálogo:
-        - Soporta --dry-run
-        - Detecta SKUs únicos y conflictivos
-        - Preserva estrictamente la curaduría existente (Ajuste #18)
-        - Aplica nuevos productos con publicado=False y SIN_REVISAR (Ajuste #17)
-        - Retorna reporte consolidado
-        """
-        excel_p = Path(excel_path)
-        cls.validar_archivo_excel(excel_p)
-
-        imagenes_p = Path(imagenes_dir) if imagenes_dir else None
-        if imagenes_p and not imagenes_p.exists():
-            imagenes_p = None
-
-        # 1. Parámetros de Pricing
-        pricing_config = ConfiguracionPricing.get_solo()
-        tc = pricing_config.tipo_cambio_usd_clp
-        factor_int = pricing_config.factor_internacion_flete_porcentaje
-        recargo_comercial = pricing_config.recargo_general_porcentaje
-        iva = pricing_config.iva_porcentaje
-
-        # 2. Indizar banco de imágenes
-        banco_imagenes = defaultdict(list)
-        imagenes_totales_banco = 0
-        if imagenes_p and imagenes_p.is_dir():
-            for img_file in imagenes_p.iterdir():
-                if img_file.is_file() and img_file.suffix.lower() in cls.EXTENSIONES_IMAGEN_VALIDAS:
-                    imagenes_totales_banco += 1
-                    stem = img_file.stem.upper().strip()
-                    if img_file not in banco_imagenes[stem]:
-                        banco_imagenes[stem].append(img_file)
-                    tokens = [t.strip() for t in re.split(r"[\s]+|-(?=[A-Za-z0-9]{4,})", stem) if t.strip()]
-                    for tok in tokens:
-                        if img_file not in banco_imagenes[tok]:
-                            banco_imagenes[tok].append(img_file)
-                        tok_base = re.split(r"[-_]\d+$", tok)[0]
-                        if tok_base and img_file not in banco_imagenes[tok_base]:
-                            banco_imagenes[tok_base].append(img_file)
-
     FORMATO_MAESTRO_ANTIGUO = "FORMATO_MAESTRO_ANTIGUO"
     FORMATO_LISTA_COMERCIAL_NUEVA = "FORMATO_LISTA_COMERCIAL_NUEVA"
 
@@ -297,8 +254,11 @@ class ImportacionCatalogoService:
 
         skus_filtro_set = {str(s).strip().upper() for s in skus_filtro} if skus_filtro else None
 
-        # 1. Parámetros de Pricing
-        pricing_config = ConfiguracionPricing.get_solo()
+        # 1. Parámetros de Pricing (sin escrituras en dry-run)
+        if is_dry_run:
+            pricing_config = ConfiguracionPricing.objects.filter(pk=1).first() or ConfiguracionPricing()
+        else:
+            pricing_config = ConfiguracionPricing.get_solo()
         tc = pricing_config.tipo_cambio_usd_clp
         factor_int = pricing_config.factor_internacion_flete_porcentaje
         recargo_comercial = pricing_config.recargo_general_porcentaje
@@ -543,15 +503,15 @@ class ImportacionCatalogoService:
 
         detalle_skus = []
 
-        # Proveedor y categoría base
-        prov, _ = Proveedor.objects.get_or_create(
-            codigo="KEY",
-            defaults={"nombre": "Keyestudio", "moneda_origen": "USD"}
-        )
-        cat_sin_clasificar, _ = Categoria.objects.get_or_create(
-            nombre="Sin clasificar",
-            defaults={"descripcion": "Componentes pendientes de curaduría pedagógica"}
-        )
+        # Verificación no destructiva de dependencias
+        dependencias_faltantes = []
+        prov = Proveedor.objects.filter(codigo="KEY").first()
+        cat_sin_clasificar = Categoria.objects.filter(nombre="Sin clasificar").first()
+
+        if not prov:
+            dependencias_faltantes.append("DEPENDENCIA_FALTANTE: Proveedor KEY (Keyestudio)")
+        if not cat_sin_clasificar:
+            dependencias_faltantes.append("DEPENDENCIA_FALTANTE: Categoría 'Sin clasificar'")
 
         for sku, data in candidatos_validos.items():
             prod_existente = existentes_map.get(sku)
@@ -630,6 +590,16 @@ class ImportacionCatalogoService:
         # 6. Ejecución definitiva si no es dry-run
         if not is_dry_run:
             with transaction.atomic():
+                # Creación segura de dependencias dentro de la transacción definitiva
+                prov, _ = Proveedor.objects.get_or_create(
+                    codigo="KEY",
+                    defaults={"nombre": "Keyestudio", "moneda_origen": "USD"}
+                )
+                cat_sin_clasificar, _ = Categoria.objects.get_or_create(
+                    nombre="Sin clasificar",
+                    defaults={"descripcion": "Componentes pendientes de curaduría pedagógica"}
+                )
+
                 for sku, data in candidatos_validos.items():
                     prod_existente = existentes_map.get(sku)
                     if prod_existente:
@@ -694,6 +664,8 @@ class ImportacionCatalogoService:
         resumen = {
             "formato_detectado": formato_detectado,
             "is_dry_run": is_dry_run,
+            "dependencias_faltantes": dependencias_faltantes,
+            "estado_dependencias": "DEPENDENCIA_FALTANTE" if dependencias_faltantes else "OK",
             "total_filas": filas_totales_leidas,
             "filas_totales_leidas": filas_totales_leidas,
             "filas_sin_sku": filas_sin_sku,
