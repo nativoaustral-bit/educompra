@@ -35,6 +35,12 @@ if not SECRET_KEY:
         raise ValueError("CRÍTICO: SECRET_KEY no está configurada en el entorno de producción.")
     SECRET_KEY = "django-insecure-dev-fallback-key-for-local-only-educompra-humm"
 
+ANALYTICS_HMAC_KEY = os.getenv("ANALYTICS_HMAC_KEY")
+if not ANALYTICS_HMAC_KEY:
+    if DJANGO_ENV == "production":
+        raise ValueError("CRÍTICO: ANALYTICS_HMAC_KEY no está configurada en el entorno de producción.")
+    ANALYTICS_HMAC_KEY = "dev-insecure-analytics-hmac-key-educompra-local-test-only"
+
 # DEBUG: solo True si explícitamente se especifica y no es producción forzada
 DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
 if DJANGO_ENV == "production":

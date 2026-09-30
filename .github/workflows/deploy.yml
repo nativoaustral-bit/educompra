@@ -29,6 +29,7 @@ jobs:
       - name: 4. Ejecutar Suite de Tests Automatizados
         env:
           SECRET_KEY: 'ci-temporary-testing-secret-key-not-for-prod'
+          ANALYTICS_HMAC_KEY: 'ci-temporary-analytics-hmac-key-for-test'
           ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
           DEBUG: 'True'
         run: |
@@ -95,6 +96,12 @@ jobs:
           echo "=== 4. VARIABLES DE ENTORNO Y MIGRACIONES ==="
           set -a
           if [ -f "${SECRETS_DIR}/.env" ]; then
+              if ! grep -q "ANALYTICS_HMAC_KEY=" "${SECRETS_DIR}/.env"; then
+                  echo "Configurando ANALYTICS_HMAC_KEY independiente en secrets/.env de producción..."
+                  NEW_ANALYTICS_KEY=$("$VENV_PYTHON" -c "import secrets; print(secrets.token_hex(32))")
+                  echo "ANALYTICS_HMAC_KEY=${NEW_ANALYTICS_KEY}" >> "${SECRETS_DIR}/.env"
+                  chmod 600 "${SECRETS_DIR}/.env"
+              fi
               source "${SECRETS_DIR}/.env"
           fi
           export DB_NAME="${DATA_DIR}/db.sqlite3"
@@ -114,31 +121,19 @@ jobs:
               cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/post_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
           fi
 
-          echo "=== 5. VERIFICACIÓN Y ACTIVACIÓN CONTROLADA DEL CATÁLOGO ==="
+          echo "=== 5. VERIFICACIÓN DE ESTADO DEL CATÁLOGO (SOLO LECTURA, SIN REPARACIÓN) ==="
           PUB_ACTUAL=$("$VENV_PYTHON" -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.filter(publicado=True).count())")
-          echo "Estado actual de productos publicados: $PUB_ACTUAL"
+          echo "Estado actual de productos publicados en base de datos: $PUB_ACTUAL"
+          "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion
 
-          if [ "$PUB_ACTUAL" -eq 0 ]; then
-              echo "--- 5.1 CONTEOS PREVIOS EN BASE PRODUCTIVA ---"
-              "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion
-
-              VAL_ACTUAL=$("$VENV_PYTHON" -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.filter(estado_curaduria='VALIDADO').count())")
-              if [ "$VAL_ACTUAL" -ne 72 ]; then
-                  echo "--- 5.2 SINCRONIZANDO CURADURÍA FASE 3 EN BD PRODUCTIVA ---"
-                  "$VENV_PYTHON" manage.py sincronizar_curaduria_fase_3
-              fi
-
-              echo "--- 5.3 EJECUCIÓN DRY-RUN OBLIGATORIA ---"
-              "$VENV_PYTHON" manage.py activar_catalogo_publico_fase_4 --dry-run
-
-              echo "--- 5.4 ACTIVACIÓN DEFINITIVA DE LOS 72 PRODUCTOS ---"
-              "$VENV_PYTHON" manage.py activar_catalogo_publico_fase_4
-
-              echo "--- 5.5 AUDITORÍA POSTERIOR CON ASERCIÓN ESTRICTA ---"
-              "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion --assert-72
-          else
-              echo "El catálogo ya se encuentra previamente activado con $PUB_ACTUAL productos públicos."
+          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-72}"
+          echo "Verificando contra estado esperado configurado ($EXPECTED_PUB productos publicados)..."
+          if [ "$PUB_ACTUAL" -ne "$EXPECTED_PUB" ]; then
+              echo "❌ ERROR: Cantidad de productos publicados ($PUB_ACTUAL) no coincide con el estado esperado configurado ($EXPECTED_PUB)." >&2
+              echo "El despliegue se detiene por seguridad sin alterar la base de datos (POLÍTICA: VERIFICAR, NO MODIFICAR)." >&2
+              exit 1
           fi
+          echo "✔ Verificación de estado de catálogo exitosa ($PUB_ACTUAL productos publicados)."
 
           echo "=== 6. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
           chmod 755 "$SUBDOMAIN_DIR"
@@ -234,16 +229,21 @@ jobs:
           fi
           echo "✔ Mensaje de validación no presente en catálogo público."
 
-          if ! echo "$CATALOGO_RESP" | grep -q "72"; then
-            echo "❌ Error: No se encontró la referencia a 72 productos en la respuesta del catálogo." >&2
+          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-72}"
+          if ! echo "$CATALOGO_RESP" | grep -q "$EXPECTED_PUB"; then
+            echo "❌ Error: No se encontró la referencia a $EXPECTED_PUB productos en la respuesta del catálogo." >&2
             exit 1
           fi
-          echo "✔ Respuesta pública del catálogo confirma 72 productos."
+          echo "✔ Respuesta pública del catálogo confirma $EXPECTED_PUB productos."
 
-          # Verificación no destructiva en el servidor: confirmar que exactamente 72 productos están publicados
-          echo "Ejecutando auditoría de estado del catálogo en HostGator..."
+          # Verificación no destructiva en el servidor: confirmar que exactamente los productos esperados están publicados
+          echo "Ejecutando auditoría de estado del catálogo en HostGator (verificación no destructiva)..."
           MAX_RETRIES=4
-          REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion --assert-72"
+          if [ "$EXPECTED_PUB" = "72" ]; then
+            REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion --assert-72"
+          else
+            REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion"
+          fi
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Intento $i de auditoría remota..."
             if ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "$REMOTE_CMD"; then

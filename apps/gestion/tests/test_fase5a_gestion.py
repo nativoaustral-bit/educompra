@@ -324,6 +324,52 @@ class TelemetriaYPrivacidadTests(GestionFase5ABaseTestCase):
         self.assertEqual(hash_1, hash_2)
         self.assertNotIn(session_key_real, hash_1)
 
+    def test_analytics_hmac_key_independiente_y_ausencia_almacenamiento_session_key(self):
+        """
+        Demuestra conforme al Ajuste Final #1 de Humm:
+        - mismo secret + misma session → mismo hash;
+        - secret distinto → hash distinto;
+        - session_key real nunca se almacena en BD ni en modelo.
+        """
+        session_key = "fake_django_session_key_secret_998877"
+        secret_a = "analytics-independent-key-AAAAA"
+        secret_b = "analytics-independent-key-BBBBB"
+
+        hash_a1 = generar_session_hash(session_key, hmac_key=secret_a)
+        hash_a2 = generar_session_hash(session_key, hmac_key=secret_a)
+        hash_b = generar_session_hash(session_key, hmac_key=secret_b)
+
+        # 1. Mismo secret + misma session → mismo hash de 64 caracteres
+        self.assertEqual(hash_a1, hash_a2)
+        self.assertEqual(len(hash_a1), 64)
+
+        # 2. Secret distinto → hash distinto
+        self.assertNotEqual(hash_a1, hash_b)
+
+        # 3. Independencia de SECRET_KEY mediante override de settings
+        with self.settings(ANALYTICS_HMAC_KEY="custom-analytics-key", SECRET_KEY="django-core-secret"):
+            hash_setting = generar_session_hash(session_key)
+            self.assertEqual(len(hash_setting), 64)
+            # Debe coincidir con la clave analítica independiente
+            self.assertEqual(hash_setting, generar_session_hash(session_key, hmac_key="custom-analytics-key"))
+            # No debe coincidir si se calculara con SECRET_KEY
+            self.assertNotEqual(hash_setting, generar_session_hash(session_key, hmac_key="django-core-secret"))
+
+        # 4. Verificar que session_key NO existe como campo en el modelo EventoUso ni se almacena
+        campos = [f.name for f in EventoUso._meta.get_fields()]
+        self.assertNotIn("session_key", campos)
+        self.assertIn("session_hash", campos)
+
+        evento = EventoUso.objects.create(
+            tipo_evento="VISITA",
+            session_hash=hash_a1,
+            metadata={}
+        )
+        evento.refresh_from_db()
+        self.assertNotIn(session_key, evento.session_hash)
+        self.assertFalse(hasattr(evento, "session_key"))
+
+
     def test_metadatos_controlados_por_whitelist_excluyen_datos_sensibles(self):
         evento = EventoUso(
             tipo_evento="VISITA",

@@ -50,14 +50,18 @@ def normalizar_rut(rut):
     return limpio
 
 
-def generar_session_hash(session_key):
+def generar_session_hash(session_key, hmac_key=None):
     """
     Genera un hash seudónimo irreversible de una session_key mediante HMAC-SHA256
-    utilizando SECRET_KEY del servidor (Ajuste Obligatorio #2 de Humm).
-    Permite agrupar eventos sin persistir jamás el identificador real de la sesión Django.
+    utilizando ANALYTICS_HMAC_KEY (clave independiente de SECRET_KEY, Ajuste Final Fase 5A).
+    Permite agrupar eventos analíticos sin persistir jamás el identificador real de la sesión Django.
     """
     if not session_key:
         return ""
-    key = getattr(settings, "SECRET_KEY", "fallback_analytics_secret").encode("utf-8")
-    h = hmac.new(key, str(session_key).encode("utf-8"), hashlib.sha256)
+    if hmac_key is None:
+        hmac_key = getattr(settings, "ANALYTICS_HMAC_KEY", "dev-insecure-analytics-hmac-key-educompra-local-test-only")
+    if isinstance(hmac_key, str):
+        hmac_key = hmac_key.encode("utf-8")
+    h = hmac.new(hmac_key, str(session_key).encode("utf-8"), hashlib.sha256)
     return h.hexdigest()
+

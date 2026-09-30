@@ -8,7 +8,8 @@ from apps.gestion.models import RegistroActividad
 # Lista negra de claves que jamás deben persistirse en detalles de auditoría
 CLAVES_PROHIBIDAS = {
     "password", "secret", "token", "csrftoken", "api_key", "secret_key",
-    "authorization", "session_key", "contraseña", "credencial"
+    "authorization", "session_key", "contraseña", "credencial",
+    "analytics_hmac_key", "hmac_key", "hmac"
 }
 
 

@@ -4,7 +4,7 @@
 *Fecha de Cierre: 30 de Septiembre de 2026*  
 *Estado: IMPLEMENTADA, SINCRONIZADA EN GITHUB MAIN Y VERIFICADA EN PRODUCCIÓN*  
 *Evidencia Canónica: CÓDIGO LOCAL = GITHUB MAIN = HOSTGATOR = FUNCIONALIDAD /GESTION/*  
-*Suite de Pruebas: 65/65 Pruebas Exitosas (100% OK)*
+*Suite de Pruebas: 66/66 Pruebas Exitosas (100% OK)*
 
 ---
 
@@ -39,7 +39,7 @@ El acceso administrativo se encuentra operativo en:
 
 #### Nuevos Modelos en `apps/gestion/models.py`:
 1. **`EventoUso`**:
-   - `session_hash`: Hash HMAC-SHA256 irreversible de 64 caracteres. **Nunca almacena la `session_key` Django real** (**Ajuste #2**).
+   - `session_hash`: Hash HMAC-SHA256 irreversible de 64 caracteres calculado con la clave independiente `ANALYTICS_HMAC_KEY` (Ajuste Final #1). **Nunca almacena la `session_key` Django real en modelo ni en base de datos** (**Ajuste #2**).
    - `tipo_evento`: `VISITA`, `BUSQUEDA`, `VER_PRODUCTO`, `AGREGAR_COTIZACION`, `QUITAR_COTIZACION`, `VER_MI_COTIZACION`, `INICIAR_SOLICITUD`, `ENVIAR_SOLICITUD` (**Ajuste #1**).
    - `metadata`: Filtrada estrictamente por `METADATA_WHITELIST`. **Prohíbe datos personales, RUT, contraseñas o tokens** (**Ajuste #3**).
    - `termino_busqueda_normalizado`, `resultados_busqueda`: Base para la detección de **Demanda No Cubierta** (**Ajuste #24**).
@@ -127,10 +127,10 @@ python manage.py conciliar_establecimientos_historicos --aplicar
 
 ---
 
-### 6. Telemetría de Uso Seudónima y Demanda No Cubierta (Ajustes #1, #2, #3, #4 y #24)
+### 6. Telemetría de Uso Seudónima y Demanda No Cubierta (Ajustes #1, #2, #3, #4, #24 y Corrección Final #1)
 
 - **Captura activa en Fase 5A:** Instrumentada en `apps/core/views.py`, `apps/catalogo/views.py`, `apps/cotizaciones/views.py` y `apps/cotizaciones/services.py`.
-- **`session_hash`:** Generado con HMAC-SHA256 utilizando la `SECRET_KEY` del servidor. La `session_key` real de Django jamás toca la base de datos.
+- **`session_hash` y Secreto Independiente:** Generado con HMAC-SHA256 utilizando la clave secreta independiente `ANALYTICS_HMAC_KEY` (completamente separada de `SECRET_KEY`). En producción esta variable es estrictamente obligatoria (se genera automáticamente con entropía criptográfica de 64 caracteres hexadecimales en `secrets/.env` con permisos `600`); en desarrollo/test cuenta con un valor identificado explícitamente como no productivo. La `session_key` real de Django jamás toca la base de datos ni es un campo en `EventoUso`.
 - **Whitelist estricta de metadatos:** Se descartan de manera forzosa correos, RUTs, nombres, cookies y contraseñas.
 - **Métricas:** En los dashboards se diferencia explícitamente:
   - *Sesiones Anónimas* ≠ *Contactos Identificados* ≠ *Establecimientos*.
@@ -143,11 +143,13 @@ python manage.py conciliar_establecimientos_historicos --aplicar
 
 - **Servicio Unificado:** `ImportacionCatalogoService` en `apps/catalogo/services_importacion.py`. Es consumido exactamente por la interfaz web `/gestion/importaciones/` y el comando de consola `importar_catalogo_keyestudio`.
 - **Almacenamiento Privado:** Configurado en `settings.PRIVATE_STORAGE_ROOT` (`private/importaciones/`), inaccesible vía HTTP público.
-- **Seguridad en Descompresión ZIP:**
-  - Inspección previa de cada archivo en el archivo comprimido.
-  - Rechazo de rutas absolutas (`/`) y secuencias de escape de directorio (`../`).
-  - Protección anti-ZIP bomb (límite de archivos: 1.000, tamaño descomprimido máximo: 250 MB).
-  - Admisión exclusiva de extensiones de imagen (`.jpg`, `.jpeg`, `.png`, `.webp`).
+- **Límites Operacionales Reales de Seguridad (Alineados con el Código, Corrección Final #2):**
+  - **Planilla Excel:** Tamaño máximo permitido de **15 MB** (formatos `.xlsx` y `.xls`).
+  - **Archivo ZIP comprimido:** Tamaño máximo permitido de **50 MB**.
+  - **Contenido ZIP descomprimido:** Tamaño máximo permitido de **150 MB** (protección estricta anti-ZIP-bomb).
+  - **Cantidad máxima de archivos en ZIP:** **2.000 archivos**.
+  - **Extensiones de imagen permitidas:** Únicamente `.jpg`, `.jpeg`, `.png`, `.webp`.
+  - Inspección previa de cada entrada en el ZIP con rechazo forzoso de rutas absolutas (`/`) y secuencias de escape de directorio (`../` path traversal).
 - **Flujo en 2 Fases (DRY-RUN + Aprobación):** La subida ejecuta obligatoriamente una simulación. Solo tras la confirmación con checkbox explícito se persisten los registros en base de datos. Los productos nuevos ingresan en borrador (`publicado=False`).
 
 ---
@@ -185,20 +187,21 @@ python manage.py conciliar_establecimientos_historicos --aplicar
 
 #### Batería de Pruebas Automatizadas:
 ```bash
-.venv/bin/python manage.py test apps.catalogo apps.cotizaciones apps.core apps.gestion
+.venv/bin/python manage.py test
 ```
 **Resultado:**
 ```
-Ran 65 tests in 11.761s
+Ran 66 tests in 12.244s
 OK
 ```
-- **19 pruebas unitarias y de integración de Fase 5A** (`apps/gestion/tests/test_fase5a_gestion.py`):
+- **20 pruebas unitarias y de integración de Fase 5A** (`apps/gestion/tests/test_fase5a_gestion.py`):
   - Control de accesos y redirecciones a login.
   - Restricciones por roles y permisos nativos.
   - Bloqueo y autorización por `ProductoPublicationService`.
   - Inalterabilidad manual de precios derivados.
   - Previsualización y confirmación de recálculo masivo de pricing.
-  - Hash HMAC irreversible de sesiones anónimas.
+  - **Independencia de `ANALYTICS_HMAC_KEY` respecto a `SECRET_KEY` y no almacenamiento de `session_key` (Corrección Final #1)**.
+  - Hash HMAC irreversible de sesiones anónimas (64 caracteres).
   - Filtrado estricto por whitelist de metadata en telemetría.
   - Conciliación de establecimientos por RUT (Nivel 1) y Nombre+Comuna (Nivel 2).
   - Exclusión de solicitudes de prueba en el Dashboard.
@@ -228,6 +231,7 @@ python manage.py shell -c "from django.db import connection; cursor = connection
    ```
    Idempotente y verificado.
 5. **Conciliación Histórica:** El comando `conciliar_establecimientos_historicos` **NO** se ejecuta con `--aplicar` en el script automático de deploy. Se mantiene en `--dry-run` para arbitraje controlado sin alterar datos sin autorización (**Ajuste #28**).
+6. **Política de Publicación en Deploy (Corrección Final #3):** Se eliminó por completo cualquier lógica de autoactivación en el pipeline. Si se detectan 0 productos públicos o un número distinto al esperado configurado (`EXPECTED_PUBLISHED_COUNT`), el workflow reporta el error y detiene el deploy, **sin ejecutar jamás `activar_catalogo_publico_fase_4` ni `sincronizar_curaduria_fase_3`**. El deploy es de **verificación pura, sin reparación automática**. La decisión de publicar o despublicar pertenece exclusivamente a Humm a través de `/gestion/productos/` o `ProductoPublicationService`.
 
 ---
 
