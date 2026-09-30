@@ -21,6 +21,9 @@ def catalogo_lista_view(request):
     Listado del catálogo público con buscador, filtros y ordenamiento.
     Usa la regla centralizada Producto.objects.publicables(user=request.user).
     """
+    from apps.gestion.services_telemetria import TelemetriaService, capturar_utms_en_sesion
+    capturar_utms_en_sesion(request)
+
     qs = Producto.objects.publicables(user=request.user).select_related("categoria").prefetch_related("tecnologias_compatibles", "imagenes")
 
     # Búsqueda por texto (nombre, descripción, sku)
@@ -69,6 +72,23 @@ def catalogo_lista_view(request):
 
     total_encontrados = qs.count()
 
+    # Registrar evento de telemetría (Búsqueda o Visita)
+    if q and not request.GET.get("page"):
+        TelemetriaService.registrar_evento(
+            request,
+            tipo_evento="BUSQUEDA",
+            termino_busqueda=q,
+            resultados_busqueda=total_encontrados,
+            metadata={
+                "order_by": orden,
+                "filter_category": categoria_slug,
+                "filter_tech": tecnologia_slug,
+                "filter_difficulty": dificultad,
+            }
+        )
+    else:
+        TelemetriaService.registrar_evento(request, tipo_evento="VISITA")
+
     # Paginación
     paginator = Paginator(qs, 12)
     page_number = request.GET.get("page")
@@ -110,11 +130,23 @@ def producto_detalle_view(request, slug):
     Ficha detallada del producto pedagógico.
     Si el producto no es publicable para el usuario actual, devuelve 404 estricto.
     """
+    from apps.gestion.services_telemetria import TelemetriaService, capturar_utms_en_sesion
+    capturar_utms_en_sesion(request)
+
     producto = get_object_or_404(
         Producto.objects.publicables(user=request.user)
         .select_related("categoria", "proveedor")
         .prefetch_related("tecnologias_compatibles", "imagenes"),
         slug=slug
+    )
+
+    # Registrar evento de visualización de producto (deduplicado)
+    TelemetriaService.registrar_evento(
+        request,
+        tipo_evento="VER_PRODUCTO",
+        producto=producto,
+        categoria=producto.categoria,
+        metadata={"product_sku": producto.sku_humm}
     )
 
     # Productos relacionados en la misma categoría

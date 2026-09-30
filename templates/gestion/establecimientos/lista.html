@@ -1,0 +1,145 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Directorio de Establecimientos — Administración EduCompra{% endblock %}
+{% block page_title %}Directorio de Establecimientos Educacionales{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:exportar_csv' 'establecimientos' %}" class="btn-admin btn-admin-secondary">
+    📥 Exportar CSV
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+  <!-- Filtros -->
+  <form method="get" class="admin-filters-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-end;">
+    <div style="flex: 1 1 240px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar Establecimiento, RBD, RUT, Comuna</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Nombre, RBD, RUT institucional..." class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Región</label>
+      <select name="region" class="admin-select" style="width: 100%;">
+        <option value="">Todas las regiones</option>
+        {% for reg in regiones %}
+          <option value="{{ reg.nombre }}" {% if region_activa == reg.nombre %}selected{% endif %}>{{ reg.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Tipo Institución</label>
+      <select name="tipo" class="admin-select" style="width: 100%;">
+        <option value="">Todos los tipos</option>
+        {% for cod, label in tipos_institucion %}
+          <option value="{{ cod }}" {% if tipo_activo == cod %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Conciliación</label>
+      <select name="conciliacion" class="admin-select" style="width: 100%;">
+        <option value="">Todos</option>
+        {% for cod, label in estados_conciliacion %}
+          <option value="{{ cod }}" {% if conciliacion_activa == cod %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+      <button type="submit" class="btn-admin btn-admin-primary">Filtrar</button>
+      <a href="{% url 'gestion:establecimientos_lista' %}" class="btn-admin btn-admin-secondary">Limpiar</a>
+    </div>
+  </form>
+
+  <div style="font-size: 0.9rem; color: var(--admin-text-muted); margin-bottom: 1rem;">
+    Total: <strong>{{ total_establecimientos }}</strong> instituciones educacionales registradas
+  </div>
+
+  <div class="admin-table-container">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Establecimiento</th>
+          <th>Ubicación</th>
+          <th>RBD / RUT</th>
+          <th>Conciliación</th>
+          <th style="text-align: center;">Solicitudes</th>
+          <th style="text-align: right;">Monto Histórico</th>
+          <th>Última Interacción</th>
+          <th style="text-align: right;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for est in page_obj %}
+          <tr>
+            <td>
+              <a href="{% url 'gestion:establecimiento_detalle' est.id %}" style="font-weight: 700; color: var(--admin-text-main); text-decoration: none;">
+                {{ est.nombre }}
+              </a>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">
+                {{ est.get_tipo_institucion_display|default:"Institución Educacional" }}
+              </div>
+            </td>
+            <td style="font-size: 0.85rem;">
+              {{ est.comuna|default:"—" }}, {{ est.region|default:"—" }}
+            </td>
+            <td style="font-size: 0.85rem; font-family: monospace;">
+              {% if est.rbd %}RBD: {{ est.rbd }}<br>{% endif %}
+              {% if est.rut %}RUT: {{ est.rut }}{% endif %}
+              {% if not est.rbd and not est.rut %}—{% endif %}
+            </td>
+            <td>
+              {% if est.estado_conciliacion == 'CONCILIADO_AUTOMATICO' or est.estado_conciliacion == 'CONCILIADO_MANUAL' %}
+                <span class="admin-badge badge-verde">{{ est.get_estado_conciliacion_display }}</span>
+              {% else %}
+                <span class="admin-badge badge-amarillo">{{ est.get_estado_conciliacion_display }}</span>
+              {% endif %}
+            </td>
+            <td style="text-align: center; font-weight: 600;">
+              {{ est.total_solicitudes|default:0 }}
+            </td>
+            <td style="text-align: right; font-weight: 700; font-family: monospace;">
+              ${{ est.monto_historico|default:0|stringformat:",d" }}
+            </td>
+            <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
+              {{ est.ultima_interaccion|date:"d/m/Y"|default:"—" }}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="{% url 'gestion:establecimiento_detalle' est.id %}" class="btn-admin btn-admin-primary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+                Ficha 360°
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+              No se encontraron establecimientos registrados con esos criterios.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if page_obj.has_other_pages %}
+    <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&region={{ region_activa }}&tipo={{ tipo_activo }}&conciliacion={{ conciliacion_activa }}" class="btn-admin btn-admin-secondary">« Anterior</a>
+      {% endif %}
+
+      <span style="font-size: 0.85rem; color: var(--admin-text-muted);">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </span>
+
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&region={{ region_activa }}&tipo={{ tipo_activo }}&conciliacion={{ conciliacion_activa }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

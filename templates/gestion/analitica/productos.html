@@ -1,0 +1,206 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Rendimiento de Productos — Administración EduCompra{% endblock %}
+{% block page_title %}Rendimiento Comercial & Demanda de Catálogo{% endblock %}
+
+{% block topbar_actions %}
+  <div class="periodo-selector">
+    <span>Período:</span>
+    <form method="get" id="form-periodo">
+      <select name="periodo" onchange="document.getElementById('form-periodo').submit()">
+        <option value="hoy" {% if periodo == 'hoy' %}selected{% endif %}>Hoy</option>
+        <option value="7_dias" {% if periodo == '7_dias' %}selected{% endif %}>Últimos 7 días</option>
+        <option value="30_dias" {% if periodo == '30_dias' %}selected{% endif %}>Últimos 30 días</option>
+        <option value="este_mes" {% if periodo == 'este_mes' %}selected{% endif %}>Este mes</option>
+        <option value="ano_actual" {% if periodo == 'ano_actual' %}selected{% endif %}>Año 2026</option>
+        <option value="historico" {% if periodo == 'historico' %}selected{% endif %}>Histórico Total</option>
+      </select>
+    </form>
+  </div>
+{% endblock %}
+
+{% block content %}
+<!-- Aviso Ajuste #17: Distinción Demanda vs Venta -->
+<div class="admin-alert admin-alert-info" style="margin-bottom: 1.5rem;">
+  <div>
+    <strong>Ajuste Obligatorio #17:</strong> En esta fase se distinguen con precisión las vistas, agregados a cotización, solicitudes y presencia en cotizaciones cerradas.
+    La métrica de <em>"Unidades realmente vendidas"</em> se integrará en Fase 5C cuando se capture el detalle por producto de la venta formal.
+  </div>
+</div>
+
+<!-- Alerta de Conversión: Alta Vista / Baja Solicitud -->
+{% if alta_vista_baja_solicitud %}
+  <div class="admin-alert admin-alert-warning" style="margin-bottom: 1.5rem;">
+    <div>
+      <strong>⚠️ Oportunidades de Conversión (Alta Vista / Sin Solicitud):</strong>
+      Se detectaron productos con alto interés de navegación que aún no se han traducido en solicitudes escolares en el período:
+      <ul style="margin: 0.5rem 0 0 1.25rem;">
+        {% for av in alta_vista_baja_solicitud %}
+          <li><strong>{{ av.producto__nombre_comercial }}</strong> ({{ av.producto__sku_humm }}) — {{ av.total_vistas }} vistas y 0 solicitudes.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+{% endif %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+
+  <!-- 1. Más Vistos -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">1. Productos Más Vistos (Interés)</h2>
+      <span class="admin-badge badge-azul">{{ periodo_label }}</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>SKU</th>
+            <th style="text-align: right;">Vistas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in mas_vistos %}
+            <tr>
+              <td>
+                <a href="{% url 'gestion:producto_detalle' p.producto__id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
+                  {{ p.producto__nombre_comercial }}
+                </a>
+              </td>
+              <td style="font-family: monospace; font-size: 0.85rem;">{{ p.producto__sku_humm }}</td>
+              <td style="text-align: right; font-weight: 700;">{{ p.total_vistas }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin datos de vistas en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 2. Más Agregados a Cotización -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">2. Más Agregados al Carro / Cotización</h2>
+      <span class="admin-badge badge-verde">Intención de Compra</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>SKU</th>
+            <th style="text-align: right;">Agregados</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in mas_agregados %}
+            <tr>
+              <td>
+                <a href="{% url 'gestion:producto_detalle' p.producto__id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
+                  {{ p.producto__nombre_comercial }}
+                </a>
+              </td>
+              <td style="font-family: monospace; font-size: 0.85rem;">{{ p.producto__sku_humm }}</td>
+              <td style="text-align: right; font-weight: 700; color: #059669;">{{ p.total_agregados }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin datos de agregados en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. Más Solicitados en Solicitudes Escolares -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">3. Más Solicitados Formalmente</h2>
+      <span class="admin-badge badge-azul">Demanda Confirmada</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th style="text-align: center;">Solicitudes</th>
+            <th style="text-align: center;">Unidades</th>
+            <th style="text-align: right;">Monto Estimado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in mas_solicitados %}
+            <tr>
+              <td>
+                <div style="font-weight: 600;">{{ p.nombre_comercial_snapshot }}</div>
+                <div style="font-family: monospace; font-size: 0.75rem; color: var(--admin-text-muted);">{{ p.sku_humm_snapshot }}</div>
+              </td>
+              <td style="text-align: center;">{{ p.conteo_solicitudes }}</td>
+              <td style="text-align: center; font-weight: 700;">{{ p.unidades_totales }}</td>
+              <td style="text-align: right; font-family: monospace;">${{ p.monto_total|stringformat:",d" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin solicitudes en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 4. Productos en Solicitudes Cerradas (Ajuste #17) -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">4. Productos en Solicitudes Cerradas</h2>
+      <span class="admin-badge badge-verde">Cierres de Venta</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th style="text-align: center;">Solicitudes Cerradas</th>
+            <th style="text-align: right;">Unidades</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in en_solicitudes_cerradas %}
+            <tr>
+              <td>
+                <div style="font-weight: 600;">{{ p.nombre_comercial_snapshot }}</div>
+                <div style="font-family: monospace; font-size: 0.75rem; color: var(--admin-text-muted);">{{ p.sku_humm_snapshot }}</div>
+              </td>
+              <td style="text-align: center; font-weight: 600;">{{ p.solicitudes_cerradas_conteo }}</td>
+              <td style="text-align: right; font-weight: 700; color: #059669;">{{ p.unidades_cerradas }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin solicitudes cerradas en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

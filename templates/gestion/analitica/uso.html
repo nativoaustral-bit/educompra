@@ -1,0 +1,169 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Telemetría de Uso — Administración EduCompra{% endblock %}
+{% block page_title %}Uso de Plataforma & Telemetría Escolar{% endblock %}
+
+{% block topbar_actions %}
+  <div class="periodo-selector">
+    <span>Período:</span>
+    <form method="get" id="form-periodo">
+      <select name="periodo" onchange="document.getElementById('form-periodo').submit()">
+        <option value="hoy" {% if periodo == 'hoy' %}selected{% endif %}>Hoy</option>
+        <option value="7_dias" {% if periodo == '7_dias' %}selected{% endif %}>Últimos 7 días</option>
+        <option value="30_dias" {% if periodo == '30_dias' %}selected{% endif %}>Últimos 30 días</option>
+        <option value="este_mes" {% if periodo == 'este_mes' %}selected{% endif %}>Este mes</option>
+        <option value="ano_actual" {% if periodo == 'ano_actual' %}selected{% endif %}>Año 2026</option>
+        <option value="historico" {% if periodo == 'historico' %}selected{% endif %}>Histórico Total</option>
+      </select>
+    </form>
+  </div>
+{% endblock %}
+
+{% block content %}
+<!-- Aviso Metodológico (Ajuste Obligatorio #4) -->
+<div class="admin-alert admin-alert-info" style="margin-bottom: 1.5rem;">
+  <div>
+    <strong>Metodología de Privacidad & Conteo (Ajustes #2, #3 y #4):</strong>
+    Las métricas de sesión se calculan mediante un <code>session_hash</code> irreversible de 64 caracteres.
+    <strong>Sesión anónima ≠ Docente o Institución:</strong> Una sesión no permite afirmar una persona física única. La información nominal solo se vincula cuando el docente envía formalmente una solicitud de cotización.
+  </div>
+</div>
+
+<!-- KPIs Globales de Telemetría -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <span class="kpi-title">Eventos Totales</span>
+    <span class="kpi-value">{{ total_eventos }}</span>
+    <span class="kpi-meta">{{ periodo_label }}</span>
+  </div>
+
+  <div class="kpi-card">
+    <span class="kpi-title">Sesiones Anónimas Únicas</span>
+    <span class="kpi-value">
+      {% if sesiones_unicas is not None %}
+        {{ sesiones_unicas }}
+      {% else %}
+        <span style="font-size: 1.1rem; color: #94a3b8;">Sin datos todavía</span>
+      {% endif %}
+    </span>
+    <span class="kpi-meta">Agrupadas por session_hash</span>
+  </div>
+
+  <div class="kpi-card">
+    <span class="kpi-title">Privacidad de Telemetría</span>
+    <span class="kpi-value" style="font-size: 1.3rem; color: #059669;">HMAC Activo</span>
+    <span class="kpi-meta">Cero session_key expuesta</span>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+
+  <!-- Eventos por Tipo -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Desglose de Eventos Registrados</h2>
+      <span class="admin-badge badge-azul">{{ periodo_label }}</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Tipo de Evento</th>
+            <th style="text-align: right;">Total Ocurrencias</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in conteo_por_tipo %}
+            <tr>
+              <td>
+                <span class="admin-badge badge-gris" style="font-family: monospace;">{{ ev.tipo_evento }}</span>
+              </td>
+              <td style="text-align: right; font-weight: 700;">
+                {{ ev.total }}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin eventos registrados para este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Fuentes de Tráfico & UTM -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Fuentes de Tráfico -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Fuentes de Origen (Tráfico)</h2>
+      </div>
+
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Fuente</th>
+              <th style="text-align: right;">Eventos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in fuentes_ranking %}
+              <tr>
+                <td><strong>{{ f.fuente }}</strong></td>
+                <td style="text-align: right; font-weight: 600;">{{ f.total }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 1.5rem; color: var(--admin-text-muted);">
+                  Sin fuentes registradas en este período.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Campañas de Marketing -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Campañas UTM Activas</h2>
+      </div>
+
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Campaña (utm_campaign)</th>
+              <th>Medio / Fuente</th>
+              <th style="text-align: right;">Impactos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in campanas_ranking %}
+              <tr>
+                <td><strong>{{ c.utm_campaign }}</strong></td>
+                <td style="font-size: 0.85rem; color: var(--admin-text-muted);">{{ c.utm_source }}</td>
+                <td style="text-align: right; font-weight: 600;">{{ c.total }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" style="text-align: center; padding: 1.5rem; color: var(--admin-text-muted);">
+                  Sin campañas UTM registradas en este período.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

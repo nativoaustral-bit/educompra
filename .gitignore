@@ -68,6 +68,8 @@ temp/
 scratch/
 data_import/
 backups/
+private/
+private_storage/
 *.sql
 *.tar.gz
 *.zip

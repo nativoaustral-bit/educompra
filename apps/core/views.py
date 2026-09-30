@@ -33,6 +33,10 @@ def home_view(request):
     """
     Portada de EduCompra Humm con buscador principal, categorías destacadas y productos curados.
     """
+    from apps.gestion.services_telemetria import TelemetriaService, capturar_utms_en_sesion
+    capturar_utms_en_sesion(request)
+    TelemetriaService.registrar_evento(request, "VISITA")
+
     publicables_qs = Producto.objects.publicables(user=request.user)
     
     # Productos destacados

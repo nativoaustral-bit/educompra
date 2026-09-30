@@ -1,0 +1,266 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}{{ producto.nombre_comercial }} ({{ producto.sku_humm }}) — Administración EduCompra{% endblock %}
+{% block page_title %}Ficha de Producto: {{ producto.nombre_comercial }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo
+  </a>
+  <a href="{% url 'gestion:producto_editar' producto.id %}" class="btn-admin btn-admin-primary">
+    ✏️ Editar Ficha
+  </a>
+  {% if producto.publicado %}
+    <a href="{% url 'catalogo:producto_detalle' producto.slug %}" target="_blank" rel="noopener" class="btn-admin btn-admin-secondary">
+      🌐 Ver en Tienda ↗
+    </a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Alerta de Publicación y Motivos de Bloqueo -->
+<div class="gestion-panel" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; background: {% if producto.publicado %}#f0fdf4{% else %}#f8fafc{% endif %}; border-left: 4px solid {% if producto.publicado %}#16a34a{% else %}#64748b{% endif %};">
+  <div>
+    <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: {% if producto.publicado %}#16a34a{% else %}#64748b{% endif %};">
+      Estado de Publicación en EduCompra
+    </div>
+    <div style="font-size: 1.1rem; font-weight: 700; color: var(--admin-text-main);">
+      {% if producto.publicado %}
+        <span style="color: #16a34a;">● Publicado y Visible en la Web Escolar</span>
+      {% else %}
+        <span style="color: #64748b;">○ Modo Borrador (Oculto al público)</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <form action="{% url 'gestion:producto_toggle_publicado' producto.id %}" method="post">
+      {% csrf_token %}
+      {% if producto.publicado %}
+        <button type="submit" class="btn-admin btn-admin-danger" onclick="return confirm('¿Seguro que deseas retirar este producto del catálogo público? No se borrarán solicitudes ni datos.');">
+          Despublicar Producto
+        </button>
+      {% else %}
+        <button type="submit" class="btn-admin btn-admin-success" {% if motivos_publicacion %}disabled title="No cumple con las reglas de calidad"{% endif %}>
+          ✓ Publicar en EduCompra
+        </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{% if not producto.publicado and motivos_publicacion %}
+  <div class="admin-alert admin-alert-warning" style="margin-bottom: 1.5rem;">
+    <div>
+      <strong>Requisitos pendientes para publicación (Ajuste #13):</strong>
+      <ul style="margin: 0.5rem 0 0 1.25rem; font-size: 0.85rem;">
+        {% for m in motivos_publicacion %}
+          <li>{{ m }}</li>
+        {% endfor %}
+      </ul>
+      <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #b45309;">
+        Complete y valide estos campos mediante <a href="{% url 'gestion:producto_editar' producto.id %}" style="text-decoration: underline; font-weight: 600;">Editar Ficha</a> antes de publicar.
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+<!-- Grid de 6 Bloques Modulares -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem;">
+
+  <!-- Bloque 1: Identificación y Clasificación -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">1. Identificación Comercial</h2>
+      <span class="admin-badge badge-azul">{{ producto.sku_humm }}</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.9rem;">
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Nombre Comercial</div>
+        <div style="font-weight: 600;">{{ producto.nombre_comercial }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Categoría</div>
+        <div style="font-weight: 600;">{{ producto.categoria.nombre|default:"Sin categoría" }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Proveedor</div>
+        <div>{{ producto.proveedor.nombre|default:"Sin proveedor" }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">SKU Proveedor</div>
+        <div style="font-family: monospace;">{{ producto.sku_proveedor|default:"—" }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Marca / Modelo</div>
+        <div>{{ producto.marca|default:"—" }} / {{ producto.modelo|default:"—" }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Unidad de Compra</div>
+        <div>{{ producto.unidad_compra }}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Estado Activo</div>
+        <div>{% if producto.activo %}<span class="admin-badge badge-verde">Activo</span>{% else %}<span class="admin-badge badge-rojo">Inactivo</span>{% endif %}</div>
+      </div>
+      <div>
+        <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Destacado / Kit</div>
+        <div>
+          {% if producto.destacado %}<span class="admin-badge badge-amarillo">Destacado</span>{% endif %}
+          {% if producto.apto_para_kit %}<span class="admin-badge badge-azul">Apto Kit</span>{% endif %}
+          {% if not producto.destacado and not producto.apto_para_kit %}—{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bloque 2: Pricing y Precios Derivados -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">2. Estructura de Costos y Precios</h2>
+      <span class="admin-badge badge-gris">Derivados Automáticos</span>
+    </div>
+    <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--admin-card-border); margin-bottom: 1rem;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+        <span style="color: var(--admin-text-muted);">Costo Proveedor USD:</span>
+        <strong style="font-family: monospace;">${{ producto.costo_proveedor_usd|default:"0.00" }} USD</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+        <span style="color: var(--admin-text-muted);">Costo Puesto Chile (CLP):</span>
+        <strong style="font-family: monospace;">${{ producto.costo_puesto_chile_clp|stringformat:",d" }} CLP</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+        <span style="color: var(--admin-text-muted);">Recargo Aplicado:</span>
+        <span>{{ producto.porcentaje_recargo|default:"General (según configuración)" }}%</span>
+      </div>
+      <hr style="border: none; border-top: 1px dashed var(--admin-card-border); margin: 0.75rem 0;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem;">
+        <span>Precio Sugerido Neto:</span>
+        <strong>${{ producto.precio_sugerido_neto_clp|stringformat:",d" }} CLP</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 1.05rem; color: var(--admin-primary);">
+        <strong>Precio Sugerido Total (con IVA):</strong>
+        <strong style="font-size: 1.2rem;">${{ producto.precio_sugerido_total_clp|stringformat:",d" }} CLP</strong>
+      </div>
+    </div>
+    <p style="font-size: 0.75rem; color: var(--admin-text-muted); margin: 0;">
+      * Cumpliendo con el Ajuste Obligatorio #16, los precios CLP son estrictamente derivados y no pueden modificarse a mano sin alterar el costo base o recargo.
+    </p>
+  </div>
+
+  <!-- Bloque 3: Rendimiento y Demanda Comercial (Ajuste #17) -->
+  <div class="gestion-panel" style="grid-column: 1 / -1;">
+    <div class="panel-header">
+      <h2 class="panel-title">3. Rendimiento Comercial & Telemetría Escolar</h2>
+      <span class="admin-badge badge-azul">Métricas de Demanda</span>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 0;">
+      <div class="kpi-card">
+        <span class="kpi-title">Vistas de Ficha</span>
+        <span class="kpi-value">{{ vistas_count }}</span>
+        <span class="kpi-meta">Eventos VER_PRODUCTO</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Agregados Cotización</span>
+        <span class="kpi-value">{{ agregados_count }}</span>
+        <span class="kpi-meta">Tasa conv: {{ tasa_vista_agregado }}%</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Solicitudes que lo Incluyen</span>
+        <span class="kpi-value">{{ solicitudes_count }}</span>
+        <span class="kpi-meta">Tasa conv: {{ tasa_vista_solicitud }}%</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Unidades Solicitadas</span>
+        <span class="kpi-value">{{ unidades_solicitadas }}</span>
+        <span class="kpi-meta">Monto: ${{ monto_solicitado|stringformat:",d" }}</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">En Solicitudes Cerradas</span>
+        <span class="kpi-value" style="color: #059669;">{{ solicitudes_cerradas_count }}</span>
+        <span class="kpi-meta">Indicador provisional Humm</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bloque 4: Contenido Pedagógico y Curaduría -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">4. Contenido Pedagógico & Curaduría</h2>
+      {% if producto.estado_curaduria == 'VALIDADO' %}
+        <span class="admin-badge badge-verde">Validado</span>
+      {% elif producto.estado_curaduria == 'EN_REVISION' %}
+        <span class="admin-badge badge-amarillo">En Revisión</span>
+      {% else %}
+        <span class="admin-badge badge-gris">Sin Revisar</span>
+      {% endif %}
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted);">Descripción Educativa</div>
+      <div style="font-size: 0.9rem; margin-top: 0.25rem;">{{ producto.descripcion_educativa|default:"Pendiente de redacción."|linebreaks }}</div>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted);">Uso en el Aula</div>
+      <div style="font-size: 0.9rem; margin-top: 0.25rem;">{{ producto.uso_educativo|default:"—"|linebreaks }}</div>
+    </div>
+
+    {% if producto.advertencia_uso %}
+      <div style="background: #fffbeb; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid #fde68a; font-size: 0.85rem; color: #92400e;">
+        <strong>⚠️ Advertencia pedagógica:</strong> {{ producto.advertencia_uso }}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Bloque 5: Bloque Técnico & Compra Pública -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">5. Especificación Neutral para Licitaciones</h2>
+      {% if producto.estado_especificacion_neutral == 'VALIDADO_HUMM' %}
+        <span class="admin-badge badge-verde">Validado Humm</span>
+      {% else %}
+        <span class="admin-badge badge-amarillo">{{ producto.get_estado_especificacion_neutral_display }}</span>
+      {% endif %}
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted);">Título Técnico Neutral</div>
+      <div style="font-weight: 600; font-size: 0.9rem;">{{ producto.titulo_especificacion_neutral|default:"Sin título neutral" }}</div>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted);">Especificación Técnica para Bases</div>
+      <div style="font-size: 0.85rem; font-family: monospace; background: #f8fafc; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); max-height: 140px; overflow-y: auto;">
+        {{ producto.especificacion_tecnica_neutral|default:"Pendiente de redacción neutral." }}
+      </div>
+    </div>
+
+    <div style="font-size: 0.85rem;">
+      <strong>Responsable Técnico:</strong> {{ producto.responsable_revision_tecnica|default:"Sin asignar" }}
+    </div>
+  </div>
+
+  <!-- Bloque 6: Galería de Imágenes -->
+  <div class="gestion-panel" style="grid-column: 1 / -1;">
+    <div class="panel-header">
+      <h2 class="panel-title">6. Galería de Imágenes</h2>
+      <span style="font-size: 0.85rem; color: var(--admin-text-muted);">Total: {{ producto.imagenes.count }} fotos</span>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+      {% for img in producto.imagenes.all %}
+        <div style="border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 0.5rem; text-align: center; background: #fff;">
+          <img src="{{ img.archivo.url }}" alt="{{ img.titulo_alt|default:producto.nombre_comercial }}" style="width: 120px; height: 120px; object-fit: contain;">
+          <div style="font-size: 0.7rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+            {% if img.es_principal %}<strong>Principal</strong>{% else %}Secundaria{% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <p style="color: var(--admin-text-muted); font-size: 0.85rem;">Este producto no tiene imágenes asociadas en la galería.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

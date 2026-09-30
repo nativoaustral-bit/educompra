@@ -1,0 +1,93 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Nuevo Producto — Administración EduCompra{% endblock %}
+{% block page_title %}Crear Nuevo Producto{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Cancelar y Volver
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel" style="max-width: 800px; margin: 0 auto;">
+  <div class="panel-header">
+    <h2 class="panel-title">Alta Manual de Producto</h2>
+    <span class="admin-badge badge-gris">Modo Borrador Inicial</span>
+  </div>
+
+  <div class="admin-alert admin-alert-info" style="margin-bottom: 1.5rem;">
+    <div>
+      <strong>Regla obligatoria de publicación:</strong> Todo nuevo producto se crea como <em>Borrador</em> (no publicado) con curaduría inicial <em>Sin Revisar</em>. Deberá completar los antecedentes pedagógicos y técnicos para poder publicarlo.
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">SKU Humm *</label>
+        <input type="text" name="sku_humm" required placeholder="Ej: HUMM-ARD-001" class="admin-input" style="width: 100%; text-transform: uppercase;">
+        <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Código único en catálogo EduCompra.</span>
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">SKU Proveedor</label>
+        <input type="text" name="sku_proveedor" placeholder="Ej: KS0001" class="admin-input" style="width: 100%; text-transform: uppercase;">
+      </div>
+
+      <div style="grid-column: 1 / -1;">
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Nombre Comercial *</label>
+        <input type="text" name="nombre_comercial" required placeholder="Ej: Placa Controladora Compatible Arduino Uno R3" class="admin-input" style="width: 100%;">
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Proveedor *</label>
+        <select name="proveedor" required class="admin-select" style="width: 100%;">
+          <option value="">Seleccione proveedor...</option>
+          {% for prov in proveedores %}
+            <option value="{{ prov.id }}">{{ prov.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Categoría</label>
+        <select name="categoria" class="admin-select" style="width: 100%;">
+          <option value="">Seleccione categoría...</option>
+          {% for cat in categorias %}
+            <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Marca</label>
+        <input type="text" name="marca" value="Keyestudio" class="admin-input" style="width: 100%;">
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Modelo</label>
+        <input type="text" name="modelo" class="admin-input" style="width: 100%;">
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Unidad de Compra</label>
+        <input type="text" name="unidad_compra" value="unidad" class="admin-input" style="width: 100%;">
+      </div>
+
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Costo Proveedor (USD)</label>
+        <input type="number" step="0.01" min="0" name="costo_proveedor_usd" value="0.00" class="admin-input" style="width: 100%;">
+        <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Los precios sugeridos en CLP se calcularán automáticamente.</span>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 1rem; border-top: 1px solid var(--admin-card-border); padding-top: 1.5rem;">
+      <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">Cancelar</a>
+      <button type="submit" class="btn-admin btn-admin-primary">Guardar Producto en Borrador</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

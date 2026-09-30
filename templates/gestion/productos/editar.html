@@ -1,0 +1,191 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Editar {{ producto.nombre_comercial }} — Administración EduCompra{% endblock %}
+{% block page_title %}Editar Ficha de Producto: {{ producto.sku_humm }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:producto_detalle' producto.id %}" class="btn-admin btn-admin-secondary">
+    ← Cancelar y Volver a Ficha
+  </a>
+{% endblock %}
+
+{% block content %}
+<form method="post" style="max-width: 1000px; margin: 0 auto;">
+  {% csrf_token %}
+
+  <!-- 1. Bloque Datos Comerciales -->
+  <div class="gestion-panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-header">
+      <h2 class="panel-title">1. Datos Comerciales e Identificación</h2>
+      <span class="admin-badge badge-azul">{{ producto.sku_humm }}</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Nombre Comercial *</label>
+        <input type="text" name="nombre_comercial" value="{{ producto.nombre_comercial }}" required class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Categoría</label>
+        <select name="categoria" class="admin-select" style="width: 100%;">
+          <option value="">Sin categoría</option>
+          {% for cat in categorias %}
+            <option value="{{ cat.id }}" {% if producto.categoria_id == cat.id %}selected{% endif %}>{{ cat.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Unidad de Compra</label>
+        <input type="text" name="unidad_compra" value="{{ producto.unidad_compra }}" class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Estado de Stock</label>
+        <select name="estado_stock" class="admin-select" style="width: 100%;">
+          {% for cod, label in stock_choices %}
+            <option value="{{ cod }}" {% if producto.estado_stock == cod %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Nivel Dificultad</label>
+        <select name="nivel_dificultad" class="admin-select" style="width: 100%;">
+          {% for cod, label in dificultad_choices %}
+            <option value="{{ cod }}" {% if producto.nivel_dificultad == cod %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Curaduría Pedagógica</label>
+        <select name="estado_curaduria" class="admin-select" style="width: 100%;">
+          {% for cod, label in curaduria_choices %}
+            <option value="{{ cod }}" {% if producto.estado_curaduria == cod %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 2rem; align-items: center; padding: 0.75rem 0;">
+      <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="destacado" {% if producto.destacado %}checked{% endif %}>
+        <span>★ Destacado en Catálogo</span>
+      </label>
+      <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="apto_para_kit" {% if producto.apto_para_kit %}checked{% endif %}>
+        <span>📦 Apto para kits escolares</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 2. Bloque Pricing y Costos -->
+  <div class="gestion-panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-header">
+      <h2 class="panel-title">2. Parámetros de Pricing</h2>
+      <span class="admin-badge badge-gris">Cálculo Derivado Automático</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Costo Proveedor USD *</label>
+        <input type="number" step="0.01" min="0" name="costo_proveedor_usd" value="{{ producto.costo_proveedor_usd|default:'0.00' }}" class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Recargo Específico (%) <span style="font-weight: normal; color: var(--admin-text-muted);">(Opcional, en blanco usa el general)</span></label>
+        <input type="number" step="0.1" min="0" name="porcentaje_recargo" value="{{ producto.porcentaje_recargo|default:'' }}" placeholder="Heredar general" class="admin-input" style="width: 100%;">
+      </div>
+    </div>
+
+    <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); font-size: 0.85rem;">
+      <strong>Valores actualmente calculados:</strong>
+      Costo Chile: ${{ producto.costo_puesto_chile_clp|stringformat:",d" }} CLP |
+      Neto: ${{ producto.precio_sugerido_neto_clp|stringformat:",d" }} CLP |
+      <strong>Total con IVA: ${{ producto.precio_sugerido_total_clp|stringformat:",d" }} CLP</strong>
+      <div style="color: var(--admin-text-muted); margin-top: 0.25rem;">
+        * Ajuste Obligatorio #16: Estos valores se recalculan matemáticamente al guardar; no se modifican directamente a mano.
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Bloque Contenido Pedagógico -->
+  <div class="gestion-panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-header">
+      <h2 class="panel-title">3. Textos Pedagógicos y Aula</h2>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Descripción Corta</label>
+      <input type="text" name="descripcion_corta" value="{{ producto.descripcion_corta }}" class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Descripción Educativa *</label>
+      <textarea name="descripcion_educativa" rows="4" class="admin-input" style="width: 100%;">{{ producto.descripcion_educativa }}</textarea>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Uso Pedagógico en Aula</label>
+      <textarea name="uso_educativo" rows="3" class="admin-input" style="width: 100%;">{{ producto.uso_educativo }}</textarea>
+    </div>
+
+    <div>
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Advertencias Pedagógicas / Edades</label>
+      <input type="text" name="advertencia_uso" value="{{ producto.advertencia_uso }}" class="admin-input" style="width: 100%;">
+    </div>
+  </div>
+
+  <!-- 4. Bloque Técnico & Compra Pública -->
+  <div class="gestion-panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-header">
+      <h2 class="panel-title">4. Especificación Neutral para Compra Pública / Mercado Público</h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Título Neutral del Ítem</label>
+        <input type="text" name="titulo_especificacion_neutral" value="{{ producto.titulo_especificacion_neutral }}" class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Estado Revisión Técnica</label>
+        <select name="estado_especificacion_neutral" class="admin-select" style="width: 100%;">
+          {% for cod, label in validacion_choices %}
+            <option value="{{ cod }}" {% if producto.estado_especificacion_neutral == cod %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Especificación Técnica Neutral (Bases Licitatorias)</label>
+      <textarea name="especificacion_tecnica_neutral" rows="4" class="admin-input" style="width: 100%; font-family: monospace; font-size: 0.85rem;">{{ producto.especificacion_tecnica_neutral }}</textarea>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Criterios de Equivalencia Técnica</label>
+      <textarea name="criterios_equivalencia" rows="2" class="admin-input" style="width: 100%;">{{ producto.criterios_equivalencia }}</textarea>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Responsable Técnico</label>
+        <input type="text" name="responsable_revision_tecnica" value="{{ producto.responsable_revision_tecnica }}" class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Fuente Técnica</label>
+        <input type="text" name="fuente_tecnica" value="{{ producto.fuente_tecnica }}" class="admin-input" style="width: 100%;">
+      </div>
+      <div>
+        <label class="form-label" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Referencia URL</label>
+        <input type="url" name="referencia_tecnica_url" value="{{ producto.referencia_tecnica_url }}" class="admin-input" style="width: 100%;">
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 3rem;">
+    <a href="{% url 'gestion:producto_detalle' producto.id %}" class="btn-admin btn-admin-secondary">Cancelar</a>
+    <button type="submit" class="btn-admin btn-admin-primary">Guardar Cambios de Ficha</button>
+  </div>
+</form>
+{% endblock %}

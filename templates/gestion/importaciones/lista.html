@@ -1,0 +1,137 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Asistente de Importaciones — Administración EduCompra{% endblock %}
+{% block page_title %}Asistente de Importación de Catálogos Masivos{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+
+  <!-- Tarjeta de Subida y DRY-RUN -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">1. Subir Catálogo para Simulación DRY-RUN</h2>
+      <span class="admin-badge badge-amarillo">Paso 1 de 2: Simulación Obligatoria</span>
+    </div>
+
+    <div class="admin-alert admin-alert-info" style="margin-bottom: 1.5rem;">
+      <div>
+        <strong>Garantía de Seguridad e Integridad (Ajustes #10, #11 y #21):</strong>
+        <ul style="margin: 0.25rem 0 0 1.25rem; font-size: 0.85rem;">
+          <li>Los archivos se almacenan en un directorio privado exclusivo fuera de la web pública.</li>
+          <li>Se inspecciona cada entrada del ZIP para evitar <em>path traversal</em> (<code>../</code>), descompresión insegura o ZIP-bombs.</li>
+          <li>La subida <strong>NUNCA</strong> modifica la base de datos de inmediato. Ejecuta una simulación <strong>DRY-RUN</strong> para que usted apruebe los cambios.</li>
+          <li>Los productos nuevos ingresan siempre en modo <strong>Borrador (no publicado)</strong>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <form action="{% url 'gestion:importaciones_subir' %}" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">
+            Planilla Excel (.xlsx, .xls) *
+          </label>
+          <input type="file" name="archivo_excel" accept=".xlsx,.xls" required class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">
+            Estructura estándar de catálogo Keyestudio o EduCompra.
+          </span>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">
+            Archivo ZIP de Imágenes (.zip) <span style="font-weight: normal; color: var(--admin-text-muted);">(Opcional)</span>
+          </label>
+          <input type="file" name="archivo_imagenes_zip" accept=".zip" class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">
+            Imágenes de producto nombradas por SKU o nombre de archivo.
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end;">
+        <button type="submit" class="btn-admin btn-admin-primary" style="font-size: 0.95rem; padding: 0.6rem 1.25rem;">
+          🚀 Subir y Ejecutar Simulación DRY-RUN
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Historial de Lotes de Importación -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Historial de Lotes de Importación</h2>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Lote ID</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th style="text-align: center;">Nuevos</th>
+            <th style="text-align: center;">Actualizados</th>
+            <th style="text-align: center;">Conflictos</th>
+            <th>Usuario</th>
+            <th style="text-align: right;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in lotes %}
+            <tr>
+              <td>
+                <strong style="color: var(--admin-primary); font-family: monospace;">#{{ l.id }}</strong>
+              </td>
+              <td style="font-size: 0.85rem; color: var(--admin-text-muted);">
+                {{ l.created_at|date:"d/m/Y H:i" }}
+              </td>
+              <td>
+                {% if l.estado == 'APLICADO' %}
+                  <span class="admin-badge badge-verde">Aplicado</span>
+                {% elif l.estado == 'DRY_RUN_OK' %}
+                  <span class="admin-badge badge-amarillo">DRY-RUN OK</span>
+                {% elif l.estado == 'FALLIDO' %}
+                  <span class="admin-badge badge-rojo">Fallido</span>
+                {% else %}
+                  <span class="admin-badge badge-gris">{{ l.get_estado_display }}</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center; font-weight: 600;">
+                {{ l.productos_nuevos }}
+              </td>
+              <td style="text-align: center; font-weight: 600;">
+                {{ l.productos_actualizados }}
+              </td>
+              <td style="text-align: center;">
+                {% if l.conflictos_detectados > 0 %}
+                  <span class="admin-badge badge-rojo">{{ l.conflictos_detectados }}</span>
+                {% else %}
+                  <span style="color: var(--admin-text-muted);">0</span>
+                {% endif %}
+              </td>
+              <td style="font-size: 0.85rem;">
+                {{ l.usuario_creador.first_name|default:l.usuario_creador.username|default:"Sistema" }}
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'gestion:importacion_detalle' l.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                  Ver Informe →
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" style="text-align: center; padding: 2.5rem; color: var(--admin-text-muted);">
+                No hay lotes de importación previos registrados.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

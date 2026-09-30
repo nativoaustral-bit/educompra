@@ -1,0 +1,297 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Solicitud {{ solicitud.codigo_seguimiento }} — Administración EduCompra{% endblock %}
+{% block page_title %}Solicitud Comercial: {{ solicitud.codigo_seguimiento }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:solicitudes_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Solicitudes
+  </a>
+  <a href="{% url 'gestion:solicitudes_kanban' %}" class="btn-admin btn-admin-secondary">
+    🗂️ Ver en Tablero Kanban
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Banner de Alerta Técnica si aplica -->
+{% if requiere_validacion %}
+  <div class="admin-alert admin-alert-warning" style="margin-bottom: 1.5rem;">
+    <div>
+      <strong>⚠️ Validación Técnica Requerida (Compra Pública):</strong>
+      Uno o más ítems en esta solicitud tienen especificación neutral en estado pendiente o en revisión. Verifique la compatibilidad antes de emitir la cotización formal.
+    </div>
+  </div>
+{% endif %}
+
+{% if solicitud.es_prueba %}
+  <div class="admin-alert admin-alert-danger" style="margin-bottom: 1.5rem;">
+    <div>
+      <strong>🧪 SOLICITUD DE PRUEBA INTERNA HUMM:</strong>
+      Esta solicitud está marcada como prueba y se encuentra excluida de los reportes y métricas de analítica comercial.
+    </div>
+  </div>
+{% endif %}
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+
+  <!-- Columna Principal: Ítems y Detalles -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <!-- Resumen de Solicitud -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">{{ solicitud.establecimiento }}</h2>
+          <div style="font-size: 0.8rem; color: var(--admin-text-muted); margin-top: 0.2rem;">
+            Ingresada el {{ solicitud.created_at|date:"d/m/Y H:i" }} | Código: <strong>{{ solicitud.codigo_seguimiento }}</strong>
+          </div>
+        </div>
+        <div>
+          {% if solicitud.estado == 'NUEVA' %}
+            <span class="badge-kanban badge-nueva" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">Nueva</span>
+          {% elif solicitud.estado == 'CERRADA' %}
+            <span class="badge-kanban badge-cerrada" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">Cerrada (Venta)</span>
+          {% else %}
+            <span class="badge-kanban badge-info" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">{{ solicitud.get_estado_display }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Tabla de Ítems Solicitados -->
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin: 1rem 0 0.5rem 0;">Ítems Solicitados (Snapshot Histórico)</h3>
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Producto / SKU</th>
+              <th style="text-align: center;">Cantidad</th>
+              <th style="text-align: right;">Precio Unitario</th>
+              <th style="text-align: right;">Subtotal</th>
+              <th style="text-align: center;">Espec. Neutral</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for itm in items %}
+              <tr>
+                <td>
+                  <div style="font-weight: 600;">
+                    {% if itm.producto %}
+                      <a href="{% url 'gestion:producto_detalle' itm.producto.id %}" style="color: var(--admin-text-main); text-decoration: none;">
+                        {{ itm.nombre_comercial_snapshot }}
+                      </a>
+                    {% else %}
+                      {{ itm.nombre_comercial_snapshot }}
+                    {% endif %}
+                  </div>
+                  <div style="font-size: 0.75rem; color: var(--admin-text-muted); font-family: monospace;">
+                    SKU: {{ itm.sku_humm_snapshot }}
+                  </div>
+                </td>
+                <td style="text-align: center; font-weight: 600;">
+                  {{ itm.cantidad }}
+                </td>
+                <td style="text-align: right; font-family: monospace;">
+                  ${{ itm.precio_unitario_snapshot|stringformat:",d" }}
+                </td>
+                <td style="text-align: right; font-weight: 700; font-family: monospace;">
+                  ${{ itm.subtotal_referencial_snapshot|stringformat:",d" }}
+                </td>
+                <td style="text-align: center;">
+                  {% if itm.producto and itm.producto.estado_especificacion_neutral == 'VALIDADO_HUMM' %}
+                    <span class="admin-badge badge-verde" style="font-size: 0.7rem;">Validado</span>
+                  {% else %}
+                    <span class="admin-badge badge-amarillo" style="font-size: 0.7rem;">Revisar</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                  No hay ítems registrados en esta solicitud.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Resumen Financiero Separado (Ajuste Obligatorio #18) -->
+      <div style="background: #f8fafc; padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); margin-top: 1rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+          <div>
+            <div style="font-size: 0.75rem; color: var(--admin-text-muted); font-weight: 600; text-transform: uppercase;">Monto Solicitado (Estimado)</div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--admin-text-main); margin-top: 0.25rem;">
+              ${{ solicitud.total_referencial_estimado|stringformat:",d" }} CLP
+            </div>
+            <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ solicitud.cantidad_total_unidades }} unidades</div>
+          </div>
+
+          <div>
+            <div style="font-size: 0.75rem; color: var(--admin-text-muted); font-weight: 600; text-transform: uppercase;">Monto Cotizado (Formal)</div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--admin-primary); margin-top: 0.25rem;">
+              {% if cotizacion_formal %}
+                ${{ cotizacion_formal.total|stringformat:",d" }} CLP
+              {% else %}
+                <span style="font-size: 0.9rem; font-weight: 500; color: #94a3b8;">Sin cotización emitida</span>
+              {% endif %}
+            </div>
+            {% if cotizacion_formal %}
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">N° {{ cotizacion_formal.numero_cotizacion }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <div style="font-size: 0.75rem; color: var(--admin-text-muted); font-weight: 600; text-transform: uppercase;">Monto Vendido (Cierre)</div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: #059669; margin-top: 0.25rem;">
+              {% if solicitud.monto_final_vendido %}
+                ${{ solicitud.monto_final_vendido|stringformat:",d" }} CLP
+              {% else %}
+                <span style="font-size: 0.9rem; font-weight: 500; color: #94a3b8;">Pendiente de cierre</span>
+              {% endif %}
+            </div>
+            {% if solicitud.subestado_cierre %}
+              <div style="font-size: 0.75rem; color: #059669;">{{ solicitud.get_subestado_cierre_display }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notas Internas & Bitácora de Seguimiento -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Bitácora de Gestión y Notas Humm</h2>
+      </div>
+
+      <div style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; line-height: 1.6; background: #fffbeb; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid #fde68a; max-height: 250px; overflow-y: auto; color: #78350f;">
+        {{ solicitud.notas_internas_humm|default:"Sin notas registradas todavía. Agregue actualizaciones usando el formulario lateral." }}
+      </div>
+
+      {% if solicitud.observaciones_adicionales %}
+        <div style="margin-top: 1rem;">
+          <strong style="font-size: 0.8rem; color: var(--admin-text-muted);">Observaciones iniciales del solicitante:</strong>
+          <div style="font-size: 0.85rem; background: #f8fafc; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); margin-top: 0.25rem;">
+            {{ solicitud.observaciones_adicionales }}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Columna Lateral: Acciones Comerciales y Contexto -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <!-- Formulario de Cambio de Estado y Asignación -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Acciones Comerciales</h2>
+      </div>
+
+      <form action="{% url 'gestion:solicitud_cambiar_estado' solicitud.id %}" method="post">
+        {% csrf_token %}
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Estado Comercial</label>
+          <select name="estado" class="admin-select" style="width: 100%;">
+            {% for cod, label in estados %}
+              <option value="{{ cod }}" {% if solicitud.estado == cod %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Responsable Humm</label>
+          <select name="responsable" class="admin-select" style="width: 100%;">
+            <option value="0">-- Sin asignar --</option>
+            {% for usr in usuarios_staff %}
+              <option value="{{ usr.id }}" {% if solicitud.responsable_id == usr.id %}selected{% endif %}>{{ usr.get_full_name|default:usr.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Monto Final Vendido (CLP)</label>
+          <input type="number" name="monto_final_vendido" value="{{ solicitud.monto_final_vendido|default:'' }}" placeholder="Monto venta formal..." class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.7rem; color: var(--admin-text-muted);">Solo para solicitudes CERRADAS.</span>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Canal / Subestado de Cierre</label>
+          <select name="subestado_cierre" class="admin-select" style="width: 100%;">
+            <option value="">Seleccione canal de cierre...</option>
+            {% for cod, label in subestados_cierre %}
+              <option value="{{ cod }}" {% if solicitud.subestado_cierre == cod %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Nueva Entrada en Bitácora</label>
+          <textarea name="nueva_nota" rows="3" placeholder="Ej: Se contactó a profesor por teléfono..." class="admin-input" style="width: 100%; font-size: 0.85rem;"></textarea>
+        </div>
+
+        <button type="submit" class="btn-admin btn-admin-primary" style="width: 100%;">
+          Actualizar Solicitud
+        </button>
+      </form>
+    </div>
+
+    <!-- Ficha del Establecimiento -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Establecimiento</h2>
+        {% if solicitud.establecimiento_ref %}
+          <a href="{% url 'gestion:establecimiento_detalle' solicitud.establecimiento_ref.id %}" style="font-size: 0.8rem; color: var(--admin-accent); font-weight: 600;">Ver Ficha 360° →</a>
+        {% endif %}
+      </div>
+
+      <div style="font-size: 0.85rem;">
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">{{ solicitud.establecimiento }}</div>
+        <div style="color: var(--admin-text-muted); margin-bottom: 0.5rem;">
+          Tipo: {{ solicitud.tipo_institucion|default:"Colegio / Escuela" }}
+        </div>
+        <div style="margin-bottom: 0.25rem;">📍 <strong>Ubicación:</strong> {{ solicitud.comuna|default:"—" }}, {{ solicitud.region|default:"—" }}</div>
+        {% if solicitud.establecimiento_ref and solicitud.establecimiento_ref.rbd %}
+          <div style="margin-bottom: 0.25rem;">🏫 <strong>RBD:</strong> {{ solicitud.establecimiento_ref.rbd }}</div>
+        {% endif %}
+        {% if solicitud.establecimiento_ref and solicitud.establecimiento_ref.rut %}
+          <div style="margin-bottom: 0.25rem;">🏛️ <strong>RUT:</strong> {{ solicitud.establecimiento_ref.rut }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Ficha del Contacto Docente -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Contacto Solicitante</h2>
+      </div>
+
+      <div style="font-size: 0.85rem;">
+        <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">{{ solicitud.nombre_solicitante }}</div>
+        <div style="color: var(--admin-text-muted); margin-bottom: 0.5rem;">
+          Cargo: {{ solicitud.cargo_solicitante|default:"Docente / Encargado" }}
+        </div>
+        <div style="margin-bottom: 0.25rem;">✉️ <strong>Email:</strong> <a href="mailto:{{ solicitud.email }}">{{ solicitud.email }}</a></div>
+        <div style="margin-bottom: 0.25rem;">📞 <strong>Teléfono:</strong> {{ solicitud.telefono|default:"No informado" }}</div>
+      </div>
+    </div>
+
+    <!-- Atribución y Telemetría -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Atribución de Tráfico</h2>
+      </div>
+
+      <div style="font-size: 0.8rem; color: var(--admin-text-muted);">
+        <div><strong>Origen:</strong> {{ solicitud.fuente_origen|default:"Web Directo" }}</div>
+        {% if solicitud.utm_source %}<div><strong>Fuente UTM:</strong> {{ solicitud.utm_source }}</div>{% endif %}
+        {% if solicitud.utm_campaign %}<div><strong>Campaña:</strong> {{ solicitud.utm_campaign }}</div>{% endif %}
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

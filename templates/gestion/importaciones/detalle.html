@@ -1,0 +1,148 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Informe Lote #{{ lote.id }} — Administración EduCompra{% endblock %}
+{% block page_title %}Informe de Simulación DRY-RUN: Lote #{{ lote.id }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:importaciones' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Importaciones
+  </a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+
+  <!-- Estado del Lote -->
+  <div class="gestion-panel" style="display: flex; justify-content: space-between; align-items: center; background: {% if lote.estado == 'APLICADO' %}#f0fdf4{% else %}#fffdf5{% endif %}; border-left: 4px solid {% if lote.estado == 'APLICADO' %}#16a34a{% else %}#f59e0b{% endif %};">
+    <div>
+      <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: {% if lote.estado == 'APLICADO' %}#16a34a{% else %}#b45309{% endif %};">
+        Estado del Proceso de Importación
+      </div>
+      <div style="font-size: 1.15rem; font-weight: 800; color: var(--admin-text-main);">
+        {% if lote.estado == 'APLICADO' %}
+          <span style="color: #16a34a;">✓ Importación Definitiva Aplicada en Catálogo</span>
+        {% elif lote.estado == 'DRY_RUN_OK' %}
+          <span style="color: #b45309;">⚠️ Simulación DRY-RUN Exitosa — Esperando Aprobación</span>
+        {% elif lote.estado == 'FALLIDO' %}
+          <span style="color: #dc2626;">✕ Error en Validación o Estructura de Archivo</span>
+        {% else %}
+          <span>{{ lote.get_estado_display }}</span>
+        {% endif %}
+      </div>
+      <div style="font-size: 0.8rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+        Subido por {{ lote.usuario_creador.first_name|default:lote.usuario_creador.username }} el {{ lote.created_at|date:"d/m/Y H:i" }}
+      </div>
+    </div>
+
+    <div>
+      <span class="admin-badge badge-gris" style="font-family: monospace;">Excel: {{ lote.archivo_excel.name|slice:":30" }}</span>
+    </div>
+  </div>
+
+  <!-- Métricas del Lote -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+    <div class="kpi-card">
+      <span class="kpi-title">Filas Procesadas</span>
+      <span class="kpi-value">{{ resumen.total_filas|default:0 }}</span>
+      <span class="kpi-meta">En planilla Excel</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="kpi-title">Productos Nuevos</span>
+      <span class="kpi-value" style="color: var(--admin-primary);">{{ lote.productos_nuevos }}</span>
+      <span class="kpi-meta">Entrarán como Borrador</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="kpi-title">Costos Actualizados</span>
+      <span class="kpi-value" style="color: #059669;">{{ lote.productos_actualizados }}</span>
+      <span class="kpi-meta">Precios CLP recalculados</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="kpi-title">Conflictos / Errores</span>
+      <span class="kpi-value" style="color: {% if lote.conflictos_detectados > 0 %}#dc2626{% else %}#059669{% endif %};">
+        {{ lote.conflictos_detectados }}
+      </span>
+      <span class="kpi-meta">Alertas de inconsistencia</span>
+    </div>
+  </div>
+
+  <!-- Lista de Conflictos / Advertencias si existen -->
+  {% if resumen.conflictos or resumen.errores %}
+    <div class="gestion-panel" style="border: 1px solid #fecaca; background: #fff5f5;">
+      <div class="panel-header">
+        <h2 class="panel-title" style="color: #991b1b;">Conflictos y Advertencias Detectadas</h2>
+        <span class="admin-badge badge-rojo">{{ lote.conflictos_detectados }} incidencias</span>
+      </div>
+
+      <div style="font-size: 0.85rem; color: #7f1d1d; max-height: 250px; overflow-y: auto;">
+        <ul style="margin: 0; padding-left: 1.25rem;">
+          {% for conf in resumen.conflictos %}
+            <li style="margin-bottom: 0.4rem;"><strong>Conflicto:</strong> {{ conf }}</li>
+          {% endfor %}
+          {% for err in resumen.errores %}
+            <li style="margin-bottom: 0.4rem;"><strong>Error:</strong> {{ err }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Paso 5 y 6: Aprobación y Aplicación Definitiva -->
+  {% if lote.estado != 'APLICADO' and lote.estado != 'FALLIDO' %}
+    <div class="gestion-panel" style="border: 2px solid var(--admin-accent);">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Aprobar y Ejecutar Importación Definitiva</h2>
+          <div style="font-size: 0.85rem; color: var(--admin-text-muted); margin-top: 0.2rem;">
+            Paso 2 de 2: Esta acción aplicará los cambios en el catálogo de EduCompra.
+          </div>
+        </div>
+        <span class="admin-badge badge-verde">Listo para Aplicar</span>
+      </div>
+
+      <div style="font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">
+        Al confirmar esta importación:
+        <ul style="margin: 0.5rem 0 0 1.25rem; font-size: 0.85rem;">
+          <li>Se crearán <strong>{{ lote.productos_nuevos }}</strong> productos en estado <em>Borrador</em> (no públicos).</li>
+          <li>Se actualizarán los costos de <strong>{{ lote.productos_actualizados }}</strong> productos existentes.</li>
+          <li>La operación quedará debidamente registrada en la bitácora de auditoría.</li>
+        </ul>
+      </div>
+
+      <form action="{% url 'gestion:importacion_aprobar' lote.id %}" method="post">
+        {% csrf_token %}
+
+        <div style="margin-bottom: 1.25rem; background: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border);">
+          <label style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+            <input type="checkbox" name="confirmacion_aprobacion" value="SI_APROBAR" required>
+            <span>He revisado el informe DRY-RUN y autorizo la importación definitiva de este lote en el catálogo.</span>
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+          <a href="{% url 'gestion:importaciones' %}" class="btn-admin btn-admin-secondary">Cancelar</a>
+          <button type="submit" class="btn-admin btn-admin-success" style="font-size: 0.95rem; padding: 0.6rem 1.25rem;">
+            ✓ Ejecutar Importación Productiva
+          </button>
+        </div>
+      </form>
+    </div>
+  {% elif lote.estado == 'APLICADO' %}
+    <div class="gestion-panel" style="text-align: center; padding: 2rem; background: #f0fdf4; border: 1px solid #bbf7d0;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: #166534; margin: 0 0 0.5rem 0;">
+        ✓ Lote de Importación Aplicado Exitosamente
+      </h3>
+      <p style="font-size: 0.85rem; color: #15803d; margin: 0 0 1rem 0;">
+        Los productos y costos de este lote ya forman parte activa del catálogo de EduCompra.
+      </p>
+      <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-primary">
+        Ver Catálogo de Productos →
+      </a>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

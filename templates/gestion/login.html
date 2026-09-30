@@ -1,0 +1,145 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso — Administración EduCompra Humm</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/reset.css' %}">
+  <link rel="stylesheet" href="{% static 'css/gestion.css' %}">
+  <style>
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 1.5rem;
+    }
+    .login-box {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: var(--radius-lg);
+      padding: 2.5rem;
+      box-shadow: var(--shadow-lg);
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .login-brand-badge {
+      display: inline-block;
+      background: var(--admin-accent);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .login-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--admin-text-main);
+      margin: 0;
+    }
+    .login-subtitle {
+      color: var(--admin-text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: var(--admin-text-main);
+    }
+    .form-control {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.65rem 0.85rem;
+      border: 1px solid var(--admin-card-border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.95rem;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--admin-accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: var(--admin-accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-login:hover {
+      background-color: #1d4ed8;
+    }
+    .login-footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--admin-text-muted);
+    }
+  </style>
+</head>
+<body class="gestion-body">
+  <div class="login-wrapper">
+    <div class="login-box">
+      <div class="login-header">
+        <span class="login-brand-badge">HUMM</span>
+        <h1 class="login-title">Administración EduCompra</h1>
+        <p class="login-subtitle">Gestión Comercial, Catálogo y Analítica</p>
+      </div>
+
+      {% if messages %}
+        <div class="admin-messages">
+          {% for message in messages %}
+            <div class="admin-alert admin-alert-{{ message.tags|default:'info' }}">
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" action="{% url 'gestion:login' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="form-group">
+          <label for="id_username">Usuario</label>
+          <input type="text" name="username" id="id_username" class="form-control" required autofocus placeholder="ej: admin">
+        </div>
+
+        <div class="form-group">
+          <label for="id_password">Contraseña</label>
+          <input type="password" name="password" id="id_password" class="form-control" required placeholder="••••••••">
+        </div>
+
+        <button type="submit" class="btn-login">Ingresar a Gestión</button>
+      </form>
+
+      <div class="login-footer">
+        <p>© {% now "Y" %} Humm SpA — Plataforma Interna de Operaciones</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

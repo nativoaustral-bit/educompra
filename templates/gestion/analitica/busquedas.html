@@ -1,0 +1,137 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Búsquedas & Demanda No Cubierta — Administración EduCompra{% endblock %}
+{% block page_title %}Inteligencia de Búsqueda & Demanda No Cubierta{% endblock %}
+
+{% block topbar_actions %}
+  <div class="periodo-selector">
+    <span>Período:</span>
+    <form method="get" id="form-periodo">
+      <select name="periodo" onchange="document.getElementById('form-periodo').submit()">
+        <option value="hoy" {% if periodo == 'hoy' %}selected{% endif %}>Hoy</option>
+        <option value="7_dias" {% if periodo == '7_dias' %}selected{% endif %}>Últimos 7 días</option>
+        <option value="30_dias" {% if periodo == '30_dias' %}selected{% endif %}>Últimos 30 días</option>
+        <option value="este_mes" {% if periodo == 'este_mes' %}selected{% endif %}>Este mes</option>
+        <option value="ano_actual" {% if periodo == 'ano_actual' %}selected{% endif %}>Año 2026</option>
+        <option value="historico" {% if periodo == 'historico' %}selected{% endif %}>Histórico Total</option>
+      </select>
+    </form>
+  </div>
+{% endblock %}
+
+{% block content %}
+<!-- KPIs de Búsqueda -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <span class="kpi-title">Búsquedas Realizadas</span>
+    <span class="kpi-value">{{ total_busquedas }}</span>
+    <span class="kpi-meta">{{ periodo_label }}</span>
+  </div>
+
+  <div class="kpi-card">
+    <span class="kpi-title">Términos Únicos</span>
+    <span class="kpi-value">{{ terminos_unicos }}</span>
+    <span class="kpi-meta">Normalizados sin tildes</span>
+  </div>
+
+  <div class="kpi-card">
+    <span class="kpi-title">Con Resultados</span>
+    <span class="kpi-value" style="color: #059669;">{{ busquedas_con_resultado }}</span>
+    <span class="kpi-meta">Hallazgos exitosos</span>
+  </div>
+
+  <div class="kpi-card">
+    <span class="kpi-title">Sin Resultados</span>
+    <span class="kpi-value" style="color: #d97706;">{{ busquedas_sin_resultado }}</span>
+    <span class="kpi-meta">Demanda insatisfecha</span>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+
+  <!-- BLOQUE DESTACADO: DEMANDA NO CUBIERTA (Ajuste Obligatorio #24) -->
+  <div class="gestion-panel" style="border: 2px solid #f59e0b; background: #fffdf5;">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title" style="color: #b45309;">Demanda No Cubierta (0 Resultados)</h2>
+        <div style="font-size: 0.8rem; color: #92400e; margin-top: 0.2rem;">
+          Términos que los docentes buscaron y no encontraron en el catálogo.
+        </div>
+      </div>
+      <span class="admin-badge badge-amarillo">Oportunidades de Compra</span>
+    </div>
+
+    <div class="admin-table-container" style="background: #fff; border-radius: var(--radius-sm);">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Término Buscado</th>
+            <th style="text-align: right;">Frecuencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in demanda_no_cubierta %}
+            <tr>
+              <td>
+                <strong style="color: #b45309; font-size: 0.95rem;">"{{ d.termino_busqueda_normalizado }}"</strong>
+              </td>
+              <td style="text-align: right; font-weight: 700; color: #b45309;">
+                {{ d.veces }} veces
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                No hay registros de búsquedas con 0 resultados en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top: 1rem; font-size: 0.75rem; color: #92400e; line-height: 1.4;">
+      * <strong>Regla Humm (Ajuste #24):</strong> Este reporte agrupa términos normalizados para orientar decisiones de compra de inventario. No genera productos automáticos ni recomendaciones arbitrarias. La decisión de incorporación corresponde exclusivamente a Humm.
+    </div>
+  </div>
+
+  <!-- Términos Más Frecuentes Generales -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Búsquedas Más Frecuentes (General)</h2>
+      <span class="admin-badge badge-azul">Top 20</span>
+    </div>
+
+    <div class="admin-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Término</th>
+            <th style="text-align: right;">Total Búsquedas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in top_busquedas %}
+            <tr>
+              <td>
+                <span style="font-weight: 600;">"{{ b.termino_busqueda_normalizado }}"</span>
+              </td>
+              <td style="text-align: right; font-weight: 700;">
+                {{ b.total }}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                Sin búsquedas registradas en este período.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

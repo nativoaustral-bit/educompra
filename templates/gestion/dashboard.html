@@ -1,0 +1,259 @@
+{% extends "gestion/base_gestion.html" %}
+{% load core_tags %}
+
+{% block page_title %}Dashboard de Gestión Comercial y Operacional{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" action="{% url 'gestion:dashboard' %}" class="periodo-selector" id="form-periodo">
+  <label for="select-periodo" style="font-weight:600; color:var(--admin-text-muted);">Período:</label>
+  <select name="periodo" id="select-periodo" onchange="document.getElementById('form-periodo').submit();">
+    <option value="hoy" {% if periodo == 'hoy' %}selected{% endif %}>Hoy</option>
+    <option value="7_dias" {% if periodo == '7_dias' %}selected{% endif %}>Últimos 7 días</option>
+    <option value="30_dias" {% if periodo == '30_dias' %}selected{% endif %}>Últimos 30 días</option>
+    <option value="este_mes" {% if periodo == 'este_mes' %}selected{% endif %}>Este mes</option>
+    <option value="mes_anterior" {% if periodo == 'mes_anterior' %}selected{% endif %}>Mes anterior</option>
+    <option value="personalizado" {% if periodo == 'personalizado' %}selected{% endif %}>Personalizado...</option>
+  </select>
+
+  {% if periodo == 'personalizado' %}
+    <input type="date" name="fecha_desde" value="{{ fecha_desde }}" class="filter-input" style="padding:0.2rem 0.4rem;">
+    <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" class="filter-input" style="padding:0.2rem 0.4rem;">
+    <button type="submit" class="btn-admin-action btn-secondary" style="padding:0.25rem 0.5rem;">Filtrar</button>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block content %}
+<!-- Alertas de Atención Operacional -->
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+  {% if solicitudes_nuevas_count > 0 %}
+    <div style="background:#e0e7ff; border:1px solid #c7d2fe; border-radius:var(--radius-md); padding:1rem; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <strong style="color:#3730a3; font-size:0.95rem;">📥 {{ solicitudes_nuevas_count }} Nueva(s) Solicitud(es)</strong>
+        <p style="margin:0.2rem 0 0 0; font-size:0.8rem; color:#4338ca;">Requieren revisión inicial y asignación de responsable comercial.</p>
+      </div>
+      <a href="{% url 'gestion:solicitudes_lista' %}?estado=NUEVA" class="btn-admin-action btn-primary" style="font-size:0.8rem;">Atender</a>
+    </div>
+  {% endif %}
+
+  {% if requieren_validacion_tecnica_count > 0 %}
+    <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:var(--radius-md); padding:1rem; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <strong style="color:#92400e; font-size:0.95rem;">⚠️ {{ requieren_validacion_tecnica_count }} Solicitud(es) con Candado Técnico</strong>
+        <p style="margin:0.2rem 0 0 0; font-size:0.8rem; color:#b45309;">Contienen productos con especificación pendiente de validación formal.</p>
+      </div>
+      <a href="{% url 'gestion:solicitudes_lista' %}?estado=EN_REVISION" class="btn-admin-action btn-secondary" style="font-size:0.8rem;">Revisar</a>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Grid de Tarjetas KPI del Período -->
+<section aria-label="Indicadores del Período" style="margin-bottom:2rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <h2 style="font-size:1rem; font-weight:700; color:var(--admin-text-main); margin:0;">
+      Indicadores Clave — <span style="color:var(--admin-accent);">{{ periodo_label }}</span>
+    </h2>
+  </div>
+
+  <div class="kpi-grid">
+    <!-- 1. Sesiones del Período -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Sesiones Anónimas</span>
+        <span class="kpi-icon">🌐</span>
+      </div>
+      <div class="kpi-value {% if sesiones_unicas is None %}empty-data{% endif %}">
+        {% if sesiones_unicas is not None %}{{ sesiones_unicas }}{% else %}Sin datos todavía{% endif %}
+      </div>
+      <div class="kpi-footer">Sesiones únicas con eventos de navegación</div>
+    </div>
+
+    <!-- 2. Solicitudes Recibidas -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Solicitudes Recibidas</span>
+        <span class="kpi-icon">📋</span>
+      </div>
+      <div class="kpi-value">{{ solicitudes_recibidas }}</div>
+      <div class="kpi-footer">{{ contactos_con_solicitud }} docente(s) solicitante(s)</div>
+    </div>
+
+    <!-- 3. Establecimientos con Solicitudes -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Establecimientos</span>
+        <span class="kpi-icon">🏫</span>
+      </div>
+      <div class="kpi-value">{{ establecimientos_con_solicitud }}</div>
+      <div class="kpi-footer">Colegios o liceos con solicitudes</div>
+    </div>
+
+    <!-- 4. Monto Solicitado -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Monto Solicitado</span>
+        <span class="kpi-icon">💵</span>
+      </div>
+      <div class="kpi-value" style="color:var(--admin-accent);">
+        {{ monto_solicitado|formato_clp }}
+      </div>
+      <div class="kpi-footer">Total referencial con IVA demandado</div>
+    </div>
+
+    <!-- 5. Cotizaciones Enviadas -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Cotizaciones Emitidas</span>
+        <span class="kpi-icon">📑</span>
+      </div>
+      <div class="kpi-value">{{ cotizaciones_enviadas }}</div>
+      <div class="kpi-footer">Cotizaciones formales entregadas</div>
+    </div>
+
+    <!-- 6. Monto Cotizado -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Monto Cotizado</span>
+        <span class="kpi-icon">💰</span>
+      </div>
+      <div class="kpi-value">
+        {{ monto_cotizado|formato_clp }}
+      </div>
+      <div class="kpi-footer">Total neto + IVA cotizado oficialmente</div>
+    </div>
+
+    <!-- 7. Cierres Exitosos -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Cierres (Ventas)</span>
+        <span class="kpi-icon">🤝</span>
+      </div>
+      <div class="kpi-value" style="color:var(--admin-success);">{{ cierres_exitosos }}</div>
+      <div class="kpi-footer">Solicitudes en estado CERRADA</div>
+    </div>
+
+    <!-- 8. Monto Vendido -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Monto Vendido</span>
+        <span class="kpi-icon">🎯</span>
+      </div>
+      <div class="kpi-value" style="color:var(--admin-success);">
+        {{ monto_vendido|formato_clp }}
+      </div>
+      <div class="kpi-footer">Monto final cerrado en pesos</div>
+    </div>
+
+    <!-- 9. Ticket Promedio -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Ticket Promedio</span>
+        <span class="kpi-icon">📊</span>
+      </div>
+      <div class="kpi-value {% if ticket_promedio is None %}empty-data{% endif %}">
+        {% if ticket_promedio %}{{ ticket_promedio|formato_clp }}{% else %}Sin datos todavía{% endif %}
+      </div>
+      <div class="kpi-footer">Promedio por solicitud recibida</div>
+    </div>
+
+    <!-- 10. Tasa de Conversión -->
+    <div class="kpi-card">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Conversión Sesión → Solicitud</span>
+        <span class="kpi-icon">⚡</span>
+      </div>
+      <div class="kpi-value {% if tasa_conversion is None %}empty-data{% endif %}">
+        {% if tasa_conversion is not None %}{{ tasa_conversion }}%{% else %}Sin datos todavía{% endif %}
+      </div>
+      <div class="kpi-footer">Solicitudes / sesiones activas</div>
+    </div>
+  </div>
+</section>
+
+<!-- Embudo Comercial Visual -->
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h2 class="admin-card-title">Embudo Comercial Docente (Funnel de Conversión)</h2>
+    <span style="font-size:0.8rem; color:var(--admin-text-muted);">Calculado por sesiones únicas e hitos comerciales</span>
+  </div>
+
+  {% if embudo %}
+    <div class="funnel-container">
+      {% for paso in embudo %}
+        <div class="funnel-step">
+          <div class="funnel-label">{{ paso.etapa }}</div>
+          <div class="funnel-bar-bg">
+            <div class="funnel-bar-fill" style="width: {{ paso.porcentaje }}%;"></div>
+          </div>
+          <div class="funnel-metrics">
+            {{ paso.cantidad }} {{ paso.unidad }} <span style="color:var(--admin-text-muted); font-size:0.75rem;">({{ paso.porcentaje }}%)</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="padding:2rem; text-align:center; color:var(--admin-text-muted);">
+      <p style="margin:0;">Sin datos suficientes de telemetría para trazar el embudo en este período.</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Últimas Solicitudes Recibidas -->
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h2 class="admin-card-title">Últimas Solicitudes Recibidas</h2>
+    <a href="{% url 'gestion:solicitudes_lista' %}" class="btn-admin-action btn-secondary" style="font-size:0.8rem;">Ver Todas las Solicitudes →</a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Fecha</th>
+          <th>Docente</th>
+          <th>Establecimiento</th>
+          <th>Total Referencial</th>
+          <th>Estado</th>
+          <th>Responsable</th>
+          <th style="text-align:right;">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sol in ultimas_solicitudes %}
+          <tr>
+            <td>
+              <a href="{% url 'gestion:solicitud_detalle' sol.id %}" style="font-weight:700; color:var(--admin-accent); text-decoration:none;">
+                {{ sol.codigo_seguimiento }}
+              </a>
+            </td>
+            <td>{{ sol.created_at|date:"d-m-Y H:i" }}</td>
+            <td><strong>{{ sol.nombre_solicitante }}</strong></td>
+            <td>{{ sol.establecimiento }} ({{ sol.comuna }})</td>
+            <td><strong>{{ sol.total_referencial_estimado|formato_clp }}</strong></td>
+            <td>
+              <span class="badge badge-{{ sol.estado|lower }}">{{ sol.get_estado_display }}</span>
+            </td>
+            <td>
+              {% if sol.responsable %}
+                {{ sol.responsable.first_name|default:sol.responsable.username }}
+              {% else %}
+                <span style="color:#ef4444; font-weight:600; font-size:0.8rem;">Sin asignar</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <a href="{% url 'gestion:solicitud_detalle' sol.id %}" class="btn-admin-action btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem;">Gestionar</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" style="text-align:center; padding:2rem; color:var(--admin-text-muted);">
+              No se han registrado solicitudes de cotización en el sistema.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,211 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}{{ establecimiento.nombre }} — Ficha 360° — EduCompra{% endblock %}
+{% block page_title %}Ficha 360° de Establecimiento Educacional{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:establecimientos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Establecimientos
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Cabecera de Ficha -->
+<div class="gestion-panel" style="margin-bottom: 1.5rem;">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">{{ establecimiento.nombre }}</h2>
+      <div style="font-size: 0.85rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+        📍 {{ establecimiento.comuna|default:"Comuna no informada" }}, {{ establecimiento.region|default:"Región no informada" }}
+        {% if establecimiento.rbd %} | 🏫 RBD: <strong>{{ establecimiento.rbd }}</strong>{% endif %}
+        {% if establecimiento.rut %} | 🏛️ RUT Institucional: <strong>{{ establecimiento.rut }}</strong>{% endif %}
+      </div>
+    </div>
+    <div>
+      <span class="admin-badge badge-verde">{{ establecimiento.get_estado_conciliacion_display }}</span>
+      <span class="admin-badge badge-azul">{{ establecimiento.get_tipo_institucion_display }}</span>
+    </div>
+  </div>
+
+  <!-- KPIs del Establecimiento -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 0;">
+    <div class="kpi-card">
+      <span class="kpi-title">Solicitudes Históricas</span>
+      <span class="kpi-value">{{ total_solicitudes }}</span>
+      <span class="kpi-meta">Excluye pruebas internas</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-title">Monto Total Solicitado</span>
+      <span class="kpi-value">${{ monto_total_solicitado|stringformat:",d" }}</span>
+      <span class="kpi-meta">Estimado referencial</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-title">Monto Total Vendido</span>
+      <span class="kpi-value" style="color: #059669;">${{ monto_total_vendido|stringformat:",d" }}</span>
+      <span class="kpi-meta">En solicitudes cerradas</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-title">Ticket Promedio Solicitud</span>
+      <span class="kpi-value">${{ ticket_promedio|stringformat:",d" }}</span>
+      <span class="kpi-meta">Por solicitud enviada</span>
+    </div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+
+  <!-- Columna Principal: Solicitudes y Productos -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <!-- Solicitudes Históricas -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Historial de Solicitudes</h2>
+      </div>
+
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Fecha</th>
+              <th>Solicitante</th>
+              <th>Monto Estimado</th>
+              <th>Estado</th>
+              <th style="text-align: right;">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sol in solicitudes %}
+              <tr>
+                <td>
+                  <a href="{% url 'gestion:solicitud_detalle' sol.id %}" style="font-weight: 700; font-family: monospace; color: var(--admin-primary); text-decoration: none;">
+                    {{ sol.codigo_seguimiento }}
+                  </a>
+                </td>
+                <td style="font-size: 0.85rem; color: var(--admin-text-muted);">
+                  {{ sol.created_at|date:"d/m/Y" }}
+                </td>
+                <td>
+                  <div style="font-weight: 600;">{{ sol.nombre_solicitante }}</div>
+                  <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ sol.email }}</div>
+                </td>
+                <td style="font-family: monospace; font-weight: 600;">
+                  ${{ sol.total_referencial_estimado|stringformat:",d" }}
+                </td>
+                <td>
+                  <span class="admin-badge badge-azul" style="font-size: 0.75rem;">{{ sol.get_estado_display }}</span>
+                </td>
+                <td style="text-align: right;">
+                  <a href="{% url 'gestion:solicitud_detalle' sol.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                    Ver Solicitud
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--admin-text-muted);">
+                  No hay solicitudes asociadas a este establecimiento.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Ranking de Productos Más Solicitados -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Productos Más Demandados por este Establecimiento</h2>
+      </div>
+
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Producto / SKU</th>
+              <th style="text-align: center;">Unidades</th>
+              <th style="text-align: right;">Monto Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in productos_ranking %}
+              <tr>
+                <td>
+                  <div style="font-weight: 600;">{{ p.nombre_comercial_snapshot }}</div>
+                  <div style="font-size: 0.75rem; color: var(--admin-text-muted); font-family: monospace;">SKU: {{ p.sku_humm_snapshot }}</div>
+                </td>
+                <td style="text-align: center; font-weight: 700;">
+                  {{ p.total_unidades }}
+                </td>
+                <td style="text-align: right; font-family: monospace;">
+                  ${{ p.total_monto|stringformat:",d" }} CLP
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" style="text-align: center; padding: 1.5rem; color: var(--admin-text-muted);">
+                  Sin registro de productos demandados.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Columna Lateral: Contactos Docentes -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Contactos Docentes</h2>
+        <span class="admin-badge badge-gris">{{ contactos.count }} registrados</span>
+      </div>
+
+      {% for c in contactos %}
+        <div style="border-bottom: 1px solid var(--admin-card-border); padding: 0.75rem 0; font-size: 0.85rem;">
+          <div style="font-weight: 700; color: var(--admin-text-main);">
+            {{ c.nombre }}
+            {% if c.posible_duplicado %}
+              <span class="admin-badge badge-amarillo" style="font-size: 0.65rem;">Posible duplicado</span>
+            {% endif %}
+          </div>
+          <div style="color: var(--admin-text-muted); font-size: 0.75rem;">Cargo: {{ c.cargo|default:"Docente" }}</div>
+          <div style="margin-top: 0.25rem;">✉️ <a href="mailto:{{ c.email }}">{{ c.email }}</a></div>
+          {% if c.telefono %}<div>📞 {{ c.telefono }}</div>{% endif %}
+          <div style="font-size: 0.7rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+            Última interacción: {{ c.ultima_interaccion|date:"d/m/Y"|default:"—" }}
+          </div>
+        </div>
+      {% empty %}
+        <p style="color: var(--admin-text-muted); font-size: 0.85rem;">No hay contactos vinculados.</p>
+      {% endfor %}
+    </div>
+
+    <!-- Fechas Históricas Reales (Ajuste Obligatorio #7) -->
+    <div class="gestion-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Historial de Interacción</h2>
+      </div>
+
+      <div style="font-size: 0.85rem;">
+        <div style="margin-bottom: 0.5rem;">
+          <strong style="color: var(--admin-text-muted); font-size: 0.75rem; text-transform: uppercase; display: block;">Primera Interacción Histórica</strong>
+          <span>{{ establecimiento.primera_interaccion|date:"d/m/Y H:i"|default:"—" }}</span>
+        </div>
+        <div>
+          <strong style="color: var(--admin-text-muted); font-size: 0.75rem; text-transform: uppercase; display: block;">Última Interacción Histórica</strong>
+          <span>{{ establecimiento.ultima_interaccion|date:"d/m/Y H:i"|default:"—" }}</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

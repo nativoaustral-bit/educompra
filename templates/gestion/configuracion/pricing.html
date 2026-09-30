@@ -1,0 +1,158 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Configuración de Pricing — Administración EduCompra{% endblock %}
+{% block page_title %}Parámetros Financieros & Recálculo de Catálogo{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+
+  <!-- Panel 1: Parámetros Financieros Base -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">1. Parámetros de Costo y Pricing EduCompra</h2>
+      <span class="admin-badge badge-azul">Configuración Global</span>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="guardar_parametros">
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Tipo de Cambio (USD → CLP) *</label>
+          <input type="number" step="0.01" min="1" name="tipo_cambio_usd_clp" value="{{ config.tipo_cambio_usd_clp }}" required class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Tasa de conversión aduanera.</span>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Factor Internación & Flete (%) *</label>
+          <input type="number" step="0.1" min="0" name="factor_internacion_flete_porcentaje" value="{{ config.factor_internacion_flete_porcentaje }}" required class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Costo de flete y aduana sobre FOB.</span>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Recargo Comercial General (%) *</label>
+          <input type="number" step="0.1" min="0" name="recargo_general_porcentaje" value="{{ config.recargo_general_porcentaje }}" required class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Margen sobre costo puesto Chile.</span>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">IVA (%) *</label>
+          <input type="number" step="0.1" min="0" name="iva_porcentaje" value="{{ config.iva_porcentaje }}" required class="admin-input" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--admin-text-muted);">Impuesto al valor agregado (Chile 19%).</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Email de Notificaciones Internas Humm</label>
+        <input type="email" name="email_notificaciones_humm" value="{{ config.email_notificaciones_humm|default:'' }}" placeholder="comercial@humm.cl" class="admin-input" style="width: 100%; max-width: 450px;">
+        <span style="font-size: 0.75rem; color: var(--admin-text-muted); display: block;">Destinatario de avisos de nuevas solicitudes comerciales.</span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--admin-card-border); padding-top: 1.25rem;">
+        <span style="font-size: 0.8rem; color: var(--admin-text-muted);">
+          ℹ️ Guardar estos parámetros <strong>NO</strong> altera los precios de los productos inmediatamente.
+        </span>
+        <button type="submit" class="btn-admin btn-admin-primary">
+          Guardar Parámetros
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Panel 2: Previsualización de Impacto y Recálculo Controlado (Ajuste Obligatorio #15) -->
+  <div class="gestion-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">2. Recálculo Controlado de Catálogo</h2>
+      <span class="admin-badge badge-amarillo">Flujo Seguro en 2 Pasos</span>
+    </div>
+
+    <div class="admin-alert admin-alert-info" style="margin-bottom: 1.5rem;">
+      <div>
+        <strong>Ajuste Obligatorio #15:</strong> Modificar los factores financieros requiere previsualizar obligatoriamente el impacto económico y el número de productos afectados antes de aplicar cambios en masa.
+      </div>
+    </div>
+
+    <form method="post" style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 1.5rem;">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="previsualizar_impacto">
+
+      <div style="flex: 1;">
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">Seleccionar Alcance del Recálculo</label>
+        <select name="alcance" class="admin-select" style="width: 100%;">
+          <option value="publicos" {% if simulacion.alcance == 'publicos' %}selected{% endif %}>Solo Productos Públicos (en tienda)</option>
+          <option value="activos" {% if simulacion.alcance == 'activos' %}selected{% endif %}>Todos los Productos Activos</option>
+          <option value="todos" {% if simulacion.alcance == 'todos' %}selected{% endif %}>Catálogo Completo (con costo USD > 0)</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn-admin btn-admin-secondary" style="font-weight: 700;">
+        🔍 Previsualizar Impacto
+      </button>
+    </form>
+
+    <!-- Resultados de la Previsualización -->
+    {% if simulacion %}
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div>
+            <h3 style="font-size: 1rem; font-weight: 700; color: #1e3a8a; margin: 0;">Resumen del Impacto Simulado</h3>
+            <div style="font-size: 0.85rem; color: #1d4ed8; margin-top: 0.25rem;">
+              Alcance: <strong>{{ simulacion.alcance }}</strong> | Productos afectados: <strong>{{ simulacion.total_afectados }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 600; color: #1e3a8a;">
+          Muestra de variación en productos representativos:
+        </div>
+
+        <div class="admin-table-container" style="background: #fff; border-radius: var(--radius-sm);">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Producto</th>
+                <th style="text-align: right;">Precio Actual (Total CLP)</th>
+                <th style="text-align: right;">Nuevo Precio Simulado</th>
+                <th style="text-align: right;">Diferencia</th>
+                <th style="text-align: right;">% Variación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in simulacion.muestra %}
+                <tr>
+                  <td style="font-family: monospace;">{{ item.sku }}</td>
+                  <td>{{ item.nombre }}</td>
+                  <td style="text-align: right; font-family: monospace;">${{ item.precio_actual|stringformat:",d" }}</td>
+                  <td style="text-align: right; font-family: monospace; font-weight: 700; color: var(--admin-primary);">${{ item.precio_nuevo|stringformat:",d" }}</td>
+                  <td style="text-align: right; font-family: monospace;">
+                    {% if item.diferencia > 0 %}+{% endif %}${{ item.diferencia|stringformat:",d" }}
+                  </td>
+                  <td style="text-align: right; font-weight: 700; color: {% if item.porcentaje > 0 %}#b45309{% elif item.porcentaje < 0 %}#059669{% else %}#64748b{% endif %};">
+                    {% if item.porcentaje > 0 %}+{% endif %}{{ item.porcentaje }}%
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Formulario de Confirmación Real -->
+        <form method="post" style="margin-top: 1.25rem; display: flex; justify-content: flex-end;">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="confirmar_recalculo">
+          <input type="hidden" name="alcance" value="{{ simulacion.alcance }}">
+
+          <button type="submit" class="btn-admin btn-admin-danger" onclick="return confirm('¿Confirmas aplicar el recálculo masivo de precios para {{ simulacion.total_afectados }} productos? Esta acción quedará registrada en auditoría.');">
+            ⚠️ Confirmar y Recalcular {{ simulacion.total_afectados }} Productos
+          </button>
+        </form>
+      </div>
+    {% endif %}
+
+  </div>
+
+</div>
+{% endblock %}

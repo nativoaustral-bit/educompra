@@ -1,7 +1,91 @@
 import uuid
 from decimal import Decimal
+from django.conf import settings
 from django.db import models
 from apps.catalogo.models import Producto
+from apps.core.normalizacion import normalizar_texto_busqueda, normalizar_email, normalizar_rut
+
+
+class Establecimiento(models.Model):
+    TIPOS_INSTITUCION = [
+        ("MUNICIPAL_SLEP", "Municipal / Servicio Local de Educación (SLEP)"),
+        ("PARTICULAR_SUBVENCIONADO", "Particular Subvencionado"),
+        ("PARTICULAR_PAGADO", "Particular Pagado"),
+        ("CORPORACION_FUNDACION", "Corporación / Fundación Educativa"),
+        ("EDUCACION_SUPERIOR", "CFT / IP / Universidad"),
+        ("OTRO", "Otro tipo de institución"),
+    ]
+
+    ESTADOS_CONCILIACION = [
+        ("CONCILIADO", "Conciliado formal"),
+        ("PENDIENTE_CONCILIACION", "Pendiente de conciliación manual"),
+    ]
+
+    nombre = models.CharField(max_length=200, db_index=True, verbose_name="Nombre de la Institución")
+    nombre_normalizado = models.CharField(max_length=200, db_index=True, blank=True, editable=False)
+    rut = models.CharField(max_length=20, blank=True, db_index=True, verbose_name="RUT Institución")
+    rbd = models.CharField(max_length=20, blank=True, db_index=True, verbose_name="RBD Mineduc")
+    tipo_institucion = models.CharField(max_length=60, choices=TIPOS_INSTITUCION, blank=True, verbose_name="Tipo de Institución")
+    comuna = models.CharField(max_length=100, verbose_name="Comuna")
+    region = models.CharField(max_length=100, db_index=True, verbose_name="Región")
+    direccion = models.CharField(max_length=255, blank=True, verbose_name="Dirección")
+    estado_conciliacion = models.CharField(max_length=30, choices=ESTADOS_CONCILIACION, default="CONCILIADO", db_index=True)
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    primera_interaccion = models.DateTimeField(null=True, blank=True, verbose_name="Primera Interacción")
+    ultima_interaccion = models.DateTimeField(null=True, blank=True, verbose_name="Última Interacción")
+    notas_internas = models.TextField(blank=True, verbose_name="Notas Internas Humm")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Establecimiento Educacional"
+        verbose_name_plural = "Establecimientos Educacionales"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.comuna}, {self.region})"
+
+    def save(self, *args, **kwargs):
+        self.nombre_normalizado = normalizar_texto_busqueda(self.nombre)
+        if self.rut:
+            self.rut = normalizar_rut(self.rut)
+        super().save(*args, **kwargs)
+
+
+class Contacto(models.Model):
+    establecimiento_principal = models.ForeignKey(
+        Establecimiento,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contactos",
+        verbose_name="Establecimiento Principal"
+    )
+    nombre = models.CharField(max_length=150, verbose_name="Nombre Completo")
+    cargo = models.CharField(max_length=100, blank=True, verbose_name="Cargo o Rol")
+    email = models.EmailField(db_index=True, verbose_name="Correo Electrónico")
+    telefono = models.CharField(max_length=50, blank=True, verbose_name="Teléfono / WhatsApp")
+    es_encargado_compras = models.BooleanField(default=False, verbose_name="Es Encargado de Compras")
+    posible_duplicado = models.BooleanField(default=False, verbose_name="Requiere Revisión de Duplicado")
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    primera_interaccion = models.DateTimeField(null=True, blank=True, verbose_name="Primera Interacción")
+    ultima_interaccion = models.DateTimeField(null=True, blank=True, verbose_name="Última Interacción")
+    observaciones_internas = models.TextField(blank=True, verbose_name="Observaciones Internas")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Contacto Docente / Institucional"
+        verbose_name_plural = "Contactos Docentes / Institucionales"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} <{self.email}>"
+
+    def save(self, *args, **kwargs):
+        self.email = normalizar_email(self.email)
+        super().save(*args, **kwargs)
+
 
 class SolicitudCotizacion(models.Model):
     ESTADOS = [
@@ -14,6 +98,14 @@ class SolicitudCotizacion(models.Model):
         ("CERRADA", "Cerrada exitosamente (Venta realizada)"),
         ("PERDIDA", "Desestimada / Perdida"),
         ("CANCELADA", "Cancelada por el solicitante"),
+    ]
+
+    SUBESTADOS_CIERRE = [
+        ("EN_NEGOCIACION", "En negociación final"),
+        ("ADJUDICADA_MP", "Adjudicada en Mercado Público"),
+        ("ORDEN_COMPRA_RECIBIDA", "Orden de Compra recibida"),
+        ("FACTURADA", "Facturada"),
+        ("PAGADA", "Pagada / Completada"),
     ]
 
     token = models.UUIDField(
@@ -84,6 +176,65 @@ class SolicitudCotizacion(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
         verbose_name="Total Referencial Estimado (CLP)"
+    )
+
+    # Relaciones relacionales de Fase 5A (Opcionales para preservar 100% histórico)
+    establecimiento_ref = models.ForeignKey(
+        Establecimiento,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="solicitudes",
+        verbose_name="Establecimiento Relacionado"
+    )
+    contacto_ref = models.ForeignKey(
+        Contacto,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="solicitudes",
+        verbose_name="Contacto Docente Principal"
+    )
+
+    # Responsable interno Humm (Ajuste #35)
+    responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="solicitudes_asignadas",
+        verbose_name="Responsable Comercial Humm"
+    )
+
+    # Origen y Atribución Comercial (UTMs)
+    fuente_origen = models.CharField(max_length=100, blank=True, default="Directo", verbose_name="Fuente de Tráfico")
+    utm_source = models.CharField(max_length=100, blank=True, verbose_name="UTM Source")
+    utm_medium = models.CharField(max_length=100, blank=True, verbose_name="UTM Medium")
+    utm_campaign = models.CharField(max_length=150, blank=True, verbose_name="UTM Campaign")
+    utm_content = models.CharField(max_length=150, blank=True, verbose_name="UTM Content")
+
+    # Cierre comercial y ventas reales (Ajustes #18 y #33)
+    monto_final_vendido = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Monto Final Vendido (CLP)"
+    )
+    subestado_cierre = models.CharField(
+        max_length=50,
+        blank=True,
+        choices=SUBESTADOS_CIERRE,
+        verbose_name="Sub-estado de Cierre Comercial"
+    )
+    fecha_cierre = models.DateField(null=True, blank=True, verbose_name="Fecha de Cierre Comercial")
+
+    # Indicador de prueba interna (Ajuste Obligatorio #29)
+    es_prueba = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Es Solicitud de Prueba Interna",
+        help_text="Marcar para excluir de métricas comerciales e indicadores del Dashboard."
     )
 
     # Campos de trazabilidad administrativa y compra pública

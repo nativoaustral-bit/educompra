@@ -23,7 +23,16 @@ def mi_cotizacion_view(request):
     Despliega la canasta de cotización del docente.
     Revalida todos los precios y la disponibilidad en base de datos.
     """
+    from apps.gestion.services_telemetria import TelemetriaService, capturar_utms_en_sesion
+    capturar_utms_en_sesion(request)
+
     canasta_info = CartService.obtener_canasta_revalidada(request)
+
+    TelemetriaService.registrar_evento(
+        request,
+        tipo_evento="VER_MI_COTIZACION",
+        metadata={"cart_items_count": canasta_info["total_articulos"]}
+    )
 
     if canasta_info["items_retirados"]:
         messages.warning(
@@ -47,6 +56,8 @@ def agregar_item_view(request):
     Agrega un producto a la canasta mediante POST.
     Admite peticiones tradicionales (redirect) o Fetch/AJAX (JSON).
     """
+    from apps.gestion.services_telemetria import TelemetriaService
+
     producto_id = request.POST.get("producto_id")
     cantidad = request.POST.get("cantidad", 1)
 
@@ -57,6 +68,13 @@ def agregar_item_view(request):
 
     try:
         producto, nueva_cant = CartService.agregar_item(request, producto_id, cantidad)
+        TelemetriaService.registrar_evento(
+            request,
+            tipo_evento="AGREGAR_COTIZACION",
+            producto=producto,
+            categoria=producto.categoria,
+            metadata={"cantidad": nueva_cant, "product_sku": producto.sku_humm}
+        )
     except ValidationError as e:
         if is_ajax:
             return JsonResponse({"status": "error", "mensaje": str(e.message)}, status=400)
@@ -109,8 +127,10 @@ def actualizar_cantidad_view(request):
 @require_POST
 def eliminar_item_view(request):
     """Elimina un ítem de la canasta."""
+    from apps.gestion.services_telemetria import TelemetriaService
     producto_id = request.POST.get("producto_id")
     CartService.eliminar_item(request, producto_id)
+    TelemetriaService.registrar_evento(request, tipo_evento="QUITAR_COTIZACION")
 
     is_ajax = (
         request.headers.get("x-requested-with") == "XMLHttpRequest"
@@ -132,7 +152,9 @@ def eliminar_item_view(request):
 @require_POST
 def vaciar_canasta_view(request):
     """Vacía todos los productos de la canasta."""
+    from apps.gestion.services_telemetria import TelemetriaService
     CartService.vaciar_canasta(request)
+    TelemetriaService.registrar_evento(request, tipo_evento="QUITAR_COTIZACION")
     messages.info(request, "Se ha vaciado su lista de cotización.")
     return redirect("cotizaciones:mi_cotizacion")
 
@@ -145,11 +167,21 @@ def solicitar_cotizacion_view(request):
     - Valida honeypot contra bots.
     - Procesa en transacción atómica y congela snapshots inmutables.
     """
+    from apps.gestion.services_telemetria import TelemetriaService, capturar_utms_en_sesion
+    capturar_utms_en_sesion(request)
+
     canasta_info = CartService.obtener_canasta_revalidada(request)
 
     if not canasta_info["items"]:
         messages.warning(request, "Su lista de cotización está vacía. Seleccione productos antes de solicitar cotización.")
         return redirect("catalogo:lista")
+
+    if request.method == "GET":
+        TelemetriaService.registrar_evento(
+            request,
+            tipo_evento="INICIAR_SOLICITUD",
+            metadata={"cart_items_count": canasta_info["total_articulos"]}
+        )
 
     regiones_comunas_map = obtener_regiones_comunas_dict()
 

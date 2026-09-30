@@ -1,0 +1,191 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Solicitudes de Cotización — Administración EduCompra{% endblock %}
+{% block page_title %}Solicitudes Comerciales Escolares{% endblock %}
+
+{% block topbar_actions %}
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    <a href="{% url 'gestion:solicitudes_lista' %}" class="btn-admin btn-admin-primary" style="background: var(--admin-sidebar-bg);">
+      📋 Vista Tabla
+    </a>
+    <a href="{% url 'gestion:solicitudes_kanban' %}" class="btn-admin btn-admin-secondary">
+      🗂️ Tablero Kanban
+    </a>
+    <a href="{% url 'gestion:exportar_csv' 'solicitudes' %}" class="btn-admin btn-admin-secondary">
+      📥 Exportar CSV
+    </a>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+  <!-- Filtros de Solicitudes -->
+  <form method="get" class="admin-filters-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-end;">
+    <div style="flex: 1 1 220px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar Solicitud, Colegio, Docente</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Código, establecimiento, email..." class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Estado Comercial</label>
+      <select name="estado" class="admin-select" style="width: 100%;">
+        <option value="">Todos los estados</option>
+        {% for cod, label in estados %}
+          <option value="{{ cod }}" {% if estado_activo == cod %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Región</label>
+      <select name="region" class="admin-select" style="width: 100%;">
+        <option value="">Todas las regiones</option>
+        {% for reg in regiones %}
+          <option value="{{ reg.nombre }}" {% if region_activa == reg.nombre %}selected{% endif %}>{{ reg.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Responsable Humm</label>
+      <select name="responsable" class="admin-select" style="width: 100%;">
+        <option value="">Todos</option>
+        <option value="sin_asignar" {% if responsable_activo == 'sin_asignar' %}selected{% endif %}>Sin asignar</option>
+        {% for usr in usuarios_staff %}
+          <option value="{{ usr.id }}" {% if responsable_activo == usr.id|stringformat:"s" %}selected{% endif %}>{{ usr.get_full_name|default:usr.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 0 1 140px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Pruebas Internas</label>
+      <select name="ver_pruebas" class="admin-select" style="width: 100%;">
+        <option value="0" {% if ver_pruebas != '1' %}selected{% endif %}>Excluir Pruebas</option>
+        <option value="1" {% if ver_pruebas == '1' %}selected{% endif %}>Incluir Pruebas</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+      <button type="submit" class="btn-admin btn-admin-primary">Filtrar</button>
+      <a href="{% url 'gestion:solicitudes_lista' %}" class="btn-admin btn-admin-secondary">Limpiar</a>
+    </div>
+  </form>
+
+  <div style="font-size: 0.9rem; color: var(--admin-text-muted); margin-bottom: 1rem;">
+    Total: <strong>{{ total_solicitudes }}</strong> solicitudes encontradas
+  </div>
+
+  <div class="admin-table-container">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Fecha</th>
+          <th>Establecimiento</th>
+          <th>Solicitante</th>
+          <th>Ubicación</th>
+          <th>Monto Solicitado</th>
+          <th>Estado</th>
+          <th>Responsable</th>
+          <th style="text-align: right;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sol in page_obj %}
+          <tr {% if sol.es_prueba %}style="background: #fff1f2;"{% endif %}>
+            <td>
+              <a href="{% url 'gestion:solicitud_detalle' sol.id %}" style="font-weight: 700; color: var(--admin-primary); font-family: monospace; text-decoration: none;">
+                {{ sol.codigo_seguimiento }}
+              </a>
+              {% if sol.es_prueba %}
+                <span class="admin-badge badge-rojo" style="display: block; font-size: 0.65rem; margin-top: 0.2rem;">PRUEBA HUMM</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
+              {{ sol.created_at|date:"d/m/Y H:i" }}
+            </td>
+            <td>
+              <div style="font-weight: 600;">
+                {% if sol.establecimiento_ref %}
+                  <a href="{% url 'gestion:establecimiento_detalle' sol.establecimiento_ref.id %}" style="color: var(--admin-text-main); text-decoration: none;">
+                    {{ sol.establecimiento_ref.nombre }}
+                  </a>
+                {% else %}
+                  {{ sol.establecimiento }}
+                {% endif %}
+              </div>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">
+                Tipo: {{ sol.tipo_institucion|default:"Escuela / Colegio" }}
+              </div>
+            </td>
+            <td>
+              <div style="font-weight: 600;">{{ sol.nombre_solicitante }}</div>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ sol.email }}</div>
+            </td>
+            <td style="font-size: 0.85rem;">
+              {{ sol.comuna|default:"—" }}, {{ sol.region|default:"—" }}
+            </td>
+            <td>
+              <strong>${{ sol.total_referencial_estimado|stringformat:",d" }}</strong>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ sol.cantidad_total_unidades }} unidades</div>
+            </td>
+            <td>
+              {% if sol.estado == 'NUEVA' %}
+                <span class="badge-kanban badge-nueva">Nueva</span>
+              {% elif sol.estado == 'EN_REVISION' %}
+                <span class="badge-kanban badge-revision">En Revisión</span>
+              {% elif sol.estado == 'REQUIERE_ANTECEDENTES' %}
+                <span class="badge-kanban badge-alerta">Req. Antecedentes</span>
+              {% elif sol.estado == 'LISTA_PARA_COTIZAR' or sol.estado == 'COTIZACION_PREPARADA' %}
+                <span class="badge-kanban badge-info">{{ sol.get_estado_display }}</span>
+              {% elif sol.estado == 'COTIZACION_ENVIADA' %}
+                <span class="badge-kanban badge-exito">Cotización Enviada</span>
+              {% elif sol.estado == 'CERRADA' %}
+                <span class="badge-kanban badge-cerrada">Cerrada (Venta)</span>
+              {% else %}
+                <span class="badge-kanban badge-perdida">{{ sol.get_estado_display }}</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 0.85rem;">
+              {% if sol.responsable %}
+                <span style="font-weight: 500;">{{ sol.responsable.first_name|default:sol.responsable.username }}</span>
+              {% else %}
+                <span style="color: #94a3b8; font-style: italic;">Sin asignar</span>
+              {% endif %}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="{% url 'gestion:solicitud_detalle' sol.id %}" class="btn-admin btn-admin-primary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+                Ver Ficha 360°
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+              No se encontraron solicitudes con los criterios de búsqueda.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if page_obj.has_other_pages %}
+    <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&estado={{ estado_activo }}&region={{ region_activa }}&responsable={{ responsable_activo }}&ver_pruebas={{ ver_pruebas }}" class="btn-admin btn-admin-secondary">« Anterior</a>
+      {% endif %}
+
+      <span style="font-size: 0.85rem; color: var(--admin-text-muted);">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </span>
+
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&estado={{ estado_activo }}&region={{ region_activa }}&responsable={{ responsable_activo }}&ver_pruebas={{ ver_pruebas }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

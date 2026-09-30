@@ -1,0 +1,117 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Directorio de Contactos Docentes — Administración EduCompra{% endblock %}
+{% block page_title %}Directorio de Docentes y Encargados Institucionales{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:exportar_csv' 'contactos' %}" class="btn-admin btn-admin-secondary">
+    📥 Exportar CSV
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+  <!-- Filtros -->
+  <form method="get" class="admin-filters-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-end;">
+    <div style="flex: 1 1 280px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar Nombre, Email, Colegio, Teléfono</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Profesor, correo@colegio.cl, cargo..." class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="flex: 0 1 200px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Alertas de Duplicados</label>
+      <select name="posible_duplicado" class="admin-select" style="width: 100%;">
+        <option value="">Todos los contactos</option>
+        <option value="1" {% if duplicados_activos == '1' or duplicados_activos == 'true' %}selected{% endif %}>Solo posibles duplicados</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+      <button type="submit" class="btn-admin btn-admin-primary">Filtrar</button>
+      <a href="{% url 'gestion:contactos_lista' %}" class="btn-admin btn-admin-secondary">Limpiar</a>
+    </div>
+  </form>
+
+  <div style="font-size: 0.9rem; color: var(--admin-text-muted); margin-bottom: 1rem;">
+    Total: <strong>{{ total_contactos }}</strong> contactos docentes registrados
+  </div>
+
+  <div class="admin-table-container">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Docente / Contacto</th>
+          <th>Email</th>
+          <th>Teléfono</th>
+          <th>Cargo</th>
+          <th>Establecimiento Principal</th>
+          <th>Alerta Duplicado</th>
+          <th>Última Interacción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in page_obj %}
+          <tr>
+            <td>
+              <div style="font-weight: 700; color: var(--admin-text-main);">{{ c.nombre }}</div>
+            </td>
+            <td>
+              <a href="mailto:{{ c.email }}" style="color: var(--admin-accent); font-weight: 500;">{{ c.email }}</a>
+            </td>
+            <td style="font-size: 0.85rem;">
+              {{ c.telefono|default:"—" }}
+            </td>
+            <td style="font-size: 0.85rem; color: var(--admin-text-muted);">
+              {{ c.cargo|default:"Docente" }}
+            </td>
+            <td>
+              {% if c.establecimiento_principal %}
+                <a href="{% url 'gestion:establecimiento_detalle' c.establecimiento_principal.id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
+                  {{ c.establecimiento_principal.nombre }}
+                </a>
+                <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ c.establecimiento_principal.comuna }}</div>
+              {% else %}
+                <span style="color: #94a3b8; font-style: italic;">Sin vincular</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.posible_duplicado %}
+                <span class="admin-badge badge-amarillo" title="Este correo está compartido o asociado a múltiples solicitudes con distintos nombres">⚠️ Posible Duplicado</span>
+              {% else %}
+                <span class="admin-badge badge-verde">Único</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
+              {{ c.ultima_interaccion|date:"d/m/Y"|default:"—" }}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+              No se encontraron contactos docentes registrados.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if page_obj.has_other_pages %}
+    <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&posible_duplicado={{ duplicados_activos }}" class="btn-admin btn-admin-secondary">« Anterior</a>
+      {% endif %}
+
+      <span style="font-size: 0.85rem; color: var(--admin-text-muted);">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </span>
+
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&posible_duplicado={{ duplicados_activos }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

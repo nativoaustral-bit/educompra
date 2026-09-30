@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.catalogo",
     "apps.cotizaciones",
+    "apps.gestion",
 ]
 
 # ==============================================================================
@@ -220,6 +221,25 @@ else:
         MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Almacenamiento Privado Seguro (Ajuste Obligatorio #10 de Humm)
+# Fuera del document root y de MEDIA_ROOT para archivos de importación confidenciales
+private_storage_env = os.getenv("PRIVATE_STORAGE_ROOT", "").strip()
+if private_storage_env:
+    PRIVATE_STORAGE_ROOT = Path(private_storage_env)
+else:
+    server_private = Path("/home1/paulocis/apps/educompra/private")
+    if server_private.parent.exists():
+        PRIVATE_STORAGE_ROOT = server_private
+    else:
+        PRIVATE_STORAGE_ROOT = BASE_DIR / "private_storage"
+
+PRIVATE_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Autenticación de la Plataforma de Gestión
+LOGIN_URL = "gestion:login"
+LOGIN_REDIRECT_URL = "gestion:dashboard"
+LOGOUT_REDIRECT_URL = "gestion:login"
 
 # Runner de pruebas personalizado para descubrimiento automático de apps
 TEST_RUNNER = "apps.core.runner.EduCompraTestRunner"

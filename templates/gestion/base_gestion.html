@@ -1,0 +1,142 @@
+{% load static core_tags %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Administración EduCompra Humm{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/reset.css' %}">
+  <link rel="stylesheet" href="{% static 'css/gestion.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="gestion-body">
+  <div class="gestion-container">
+    <!-- Sidebar Lateral -->
+    <aside class="gestion-sidebar" aria-label="Menú Principal Administración">
+      <div class="sidebar-header">
+        <span class="sidebar-brand-badge">HUMM</span>
+        <a href="{% url 'gestion:dashboard' %}" class="sidebar-brand-title">
+          EduCompra
+          <span>Administración</span>
+        </a>
+      </div>
+
+      <ul class="sidebar-menu">
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+          <a href="{% url 'gestion:dashboard' %}">
+            <span>📊 Dashboard</span>
+          </a>
+        </li>
+
+        <li class="sidebar-section-title">Catálogo</li>
+        <li class="sidebar-item {% if 'productos' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:productos_lista' %}">
+            <span>📦 Productos</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if 'importaciones' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:importaciones' %}">
+            <span>📥 Importaciones</span>
+          </a>
+        </li>
+
+        <li class="sidebar-section-title">Comercial</li>
+        <li class="sidebar-item {% if 'solicitud' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:solicitudes_lista' %}">
+            <span>📋 Solicitudes</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if 'cotizaciones' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:cotizaciones_lista' %}">
+            <span>📑 Cotizaciones</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if 'establecimientos' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:establecimientos_lista' %}">
+            <span>🏫 Establecimientos</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if 'contactos' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:contactos_lista' %}">
+            <span>👥 Contactos</span>
+          </a>
+        </li>
+
+        <li class="sidebar-section-title">Analítica</li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'analitica_uso' %}active{% endif %}">
+          <a href="{% url 'gestion:analitica_uso' %}">
+            <span>📈 Uso de Plataforma</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'analitica_productos' %}active{% endif %}">
+          <a href="{% url 'gestion:analitica_productos' %}">
+            <span>🎯 Rendimiento Productos</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'analitica_busquedas' %}active{% endif %}">
+          <a href="{% url 'gestion:analitica_busquedas' %}">
+            <span>🔍 Búsquedas & Demanda</span>
+          </a>
+        </li>
+
+        <li class="sidebar-section-title">Sistema</li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'configuracion' %}active{% endif %}">
+          <a href="{% url 'gestion:configuracion' %}">
+            <span>⚙️ Configuración & Pricing</span>
+          </a>
+        </li>
+        <li class="sidebar-item">
+          <a href="/admin/" target="_blank" rel="noopener">
+            <span>🛠️ Django Admin ↗</span>
+          </a>
+        </li>
+        <li class="sidebar-item">
+          <a href="{% url 'core:home' %}" target="_blank" rel="noopener">
+            <span>🌐 Ver Catálogo Público ↗</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-info">
+          <div>
+            <div class="sidebar-user-name">{{ request.user.first_name|default:request.user.username }}</div>
+            <div class="sidebar-user-role">{% if request.user.is_superuser %}Superadministrador{% elif request.user.is_staff %}Staff Humm{% else %}Comercial{% endif %}</div>
+          </div>
+          <a href="{% url 'gestion:logout' %}" class="btn-sidebar-logout" title="Cerrar sesión">Salir</a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Área de Contenido Principal -->
+    <main class="gestion-main">
+      <header class="gestion-topbar">
+        <div class="topbar-left">
+          <h1 class="topbar-title">{% block page_title %}Administración EduCompra{% endblock %}</h1>
+        </div>
+        <div class="topbar-right">
+          {% block topbar_actions %}{% endblock %}
+        </div>
+      </header>
+
+      <div class="gestion-content">
+        {% if messages %}
+          <div class="admin-messages">
+            {% for message in messages %}
+              <div class="admin-alert admin-alert-{{ message.tags|default:'info' }}">
+                <span>{{ message }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

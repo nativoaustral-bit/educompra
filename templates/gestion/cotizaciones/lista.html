@@ -1,0 +1,111 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Cotizaciones Formales — Administración EduCompra{% endblock %}
+{% block page_title %}Cotizaciones Formales Emitidas{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:solicitudes_lista' %}" class="btn-admin btn-admin-secondary">
+    📋 Ver Solicitudes
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+  <!-- Filtro de Búsqueda -->
+  <form method="get" class="admin-filters-bar" style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-end;">
+    <div style="flex: 1 1 300px;">
+      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar N° Cotización, Solicitud, Colegio</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="N° cotización, código seguimiento, colegio..." class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="display: flex; gap: 0.5rem;">
+      <button type="submit" class="btn-admin btn-admin-primary">Buscar</button>
+      <a href="{% url 'gestion:cotizaciones_lista' %}" class="btn-admin btn-admin-secondary">Limpiar</a>
+    </div>
+  </form>
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <div style="font-size: 0.9rem; color: var(--admin-text-muted);">
+      Total: <strong>{{ total_cotizaciones }}</strong> cotizaciones emitidas
+    </div>
+    <div style="font-size: 0.95rem; font-weight: 700; color: var(--admin-primary);">
+      Monto Total Cotizado: ${{ monto_total_cotizado|stringformat:",d" }} CLP
+    </div>
+  </div>
+
+  <div class="admin-table-container">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>N° Cotización</th>
+          <th>Fecha Emisión</th>
+          <th>Solicitud Origen</th>
+          <th>Establecimiento</th>
+          <th>Solicitante</th>
+          <th style="text-align: right;">Neto</th>
+          <th style="text-align: right;">Total Cotizado</th>
+          <th>Vigencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cot in page_obj %}
+          <tr>
+            <td>
+              <strong style="color: var(--admin-primary); font-family: monospace;">{{ cot.numero_cotizacion }}</strong>
+            </td>
+            <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
+              {{ cot.fecha_emision|date:"d/m/Y" }}
+            </td>
+            <td>
+              <a href="{% url 'gestion:solicitud_detalle' cot.solicitud.id %}" style="font-weight: 600; font-family: monospace; color: var(--admin-accent); text-decoration: none;">
+                {{ cot.solicitud.codigo_seguimiento }}
+              </a>
+            </td>
+            <td>
+              <div style="font-weight: 600;">{{ cot.solicitud.establecimiento }}</div>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ cot.solicitud.comuna }}</div>
+            </td>
+            <td>
+              <div style="font-weight: 600;">{{ cot.solicitud.nombre_solicitante }}</div>
+              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ cot.solicitud.email }}</div>
+            </td>
+            <td style="text-align: right; font-family: monospace;">
+              ${{ cot.subtotal_neto|stringformat:",d" }}
+            </td>
+            <td style="text-align: right; font-weight: 700; font-family: monospace; color: var(--admin-primary);">
+              ${{ cot.total|stringformat:",d" }}
+            </td>
+            <td style="font-size: 0.85rem;">
+              {{ cot.validez_oferta_dias }} días
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+              No se registran cotizaciones formales emitidas aún.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  {% if page_obj.has_other_pages %}
+    <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}" class="btn-admin btn-admin-secondary">« Anterior</a>
+      {% endif %}
+
+      <span style="font-size: 0.85rem; color: var(--admin-text-muted);">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </span>
+
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -102,8 +102,17 @@ jobs:
           set +a
 
           cd "$APP_DIR"
+          if [ -f "${DATA_DIR}/db.sqlite3" ]; then
+              "$VENV_PYTHON" -c "import sqlite3; conn = sqlite3.connect('${DATA_DIR}/db.sqlite3'); res = conn.execute('PRAGMA integrity_check;').fetchone()[0]; print(f'SQLite pre-migrate integrity: {res}'); assert res == 'ok'; conn.close()"
+          fi
           "$VENV_PYTHON" manage.py migrate --noinput
+          "$VENV_PYTHON" manage.py crear_roles_gestion
           "$VENV_PYTHON" manage.py collectstatic --noinput
+
+          if [ -f "${DATA_DIR}/db.sqlite3" ]; then
+              "$VENV_PYTHON" -c "import sqlite3; conn = sqlite3.connect('${DATA_DIR}/db.sqlite3'); res = conn.execute('PRAGMA integrity_check;').fetchone()[0]; print(f'SQLite post-migrate integrity: {res}'); assert res == 'ok'; conn.close()"
+              cp -p "${DATA_DIR}/db.sqlite3" "${BACKUPS_DIR}/post_deploy_$(date +%Y%m%d_%H%M%S).sqlite3"
+          fi
 
           echo "=== 5. VERIFICACIÓN Y ACTIVACIÓN CONTROLADA DEL CATÁLOGO ==="
           PUB_ACTUAL=$("$VENV_PYTHON" -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.catalogo.models import Producto; print(Producto.objects.filter(publicado=True).count())")
@@ -250,15 +259,32 @@ jobs:
             fi
           done
 
+          # Verificación de endpoints de Administración Fase 5A
+          HTTP_GESTION=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/gestion/)
+          echo "✔ Endpoint /gestion/ responde HTTP $HTTP_GESTION (esperado 302 redirect a login)"
+          if [ "$HTTP_GESTION" != "302" ] && [ "$HTTP_GESTION" != "200" ]; then
+            echo "❌ Error: /gestion/ devolvió HTTP $HTTP_GESTION" >&2
+            exit 1
+          fi
+
+          HTTP_LOGIN=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/gestion/login/)
+          echo "✔ Endpoint /gestion/login/ responde HTTP $HTTP_LOGIN (esperado 200)"
+          if [ "$HTTP_LOGIN" != "200" ]; then
+            echo "❌ Error: /gestion/login/ devolvió HTTP $HTTP_LOGIN" >&2
+            exit 1
+          fi
+
       - name: 8. Auditoría de Seguridad Pública en HostGator (Verificación de No-Exposición)
         run: |
           # 1. Comprobar que ningún reporte Markdown esté expuesto públicamente
-          STATUS_MD=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/INFORME_ACTIVACION_FASE_4B.md)
-          if [ "$STATUS_MD" = "200" ]; then
-            echo "❌ ALERTA DE SEGURIDAD: INFORME_ACTIVACION_FASE_4B.md está accesible públicamente (HTTP $STATUS_MD)." >&2
-            exit 1
-          fi
-          echo "✔ Markdown privado no expuesto: HTTP $STATUS_MD (esperado != 200)"
+          for doc in INFORME_ACTIVACION_FASE_4B.md INFORME_IMPLEMENTACION_FASE_5A.md implementation_plan_fase_5_administracion.md; do
+            STATUS_DOC=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/$doc)
+            if [ "$STATUS_DOC" = "200" ]; then
+              echo "❌ ALERTA DE SEGURIDAD: $doc está accesible públicamente (HTTP $STATUS_DOC)." >&2
+              exit 1
+            fi
+            echo "✔ Markdown privado no expuesto: $doc -> HTTP $STATUS_DOC (esperado != 200)"
+          done
 
           # 2. Comprobar que .git no esté expuesto públicamente
           STATUS_GIT=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/.git/HEAD)
@@ -283,3 +309,11 @@ jobs:
             exit 1
           fi
           echo "✔ SQLite no expuesta: HTTP $STATUS_DB (esperado != 200)"
+
+          # 5. Comprobar que directorio privado de importaciones no esté expuesto
+          STATUS_PRIV=$(curl -s -o /dev/null -w "%{http_code}" https://educompra.humm.cl/private/)
+          if [ "$STATUS_PRIV" = "200" ]; then
+            echo "❌ ALERTA DE SEGURIDAD: private/ está accesible públicamente (HTTP $STATUS_PRIV)." >&2
+            exit 1
+          fi
+          echo "✔ Directorio privado no expuesto: HTTP $STATUS_PRIV (esperado != 200)"

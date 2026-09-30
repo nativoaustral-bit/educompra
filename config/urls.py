@@ -40,6 +40,9 @@ urlpatterns = [
     path("solicitar-cotizacion/", solicitar_cotizacion_view, name="solicitar_cotizacion"),
     path("solicitud-recibida/<uuid:token>/", solicitud_recibida_view, name="solicitud_recibida"),
 
+    # Plataforma de Administración, Gestión Comercial y Analítica
+    path("gestion/", include("apps.gestion.urls")),
+
     # Apps de dominio
     path("", include("apps.core.urls")),
     path("catalogo/", include("apps.catalogo.urls")),

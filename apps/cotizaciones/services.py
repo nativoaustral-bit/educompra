@@ -279,7 +279,21 @@ class SubmissionService:
                 observaciones=form_data.get("observaciones", "").strip(),
                 total_referencial_estimado=Decimal("0"),
             )
+            # Atribución UTM desde sesión (Ajuste #34)
+            utms = request.session.get("marketing_attribution", {})
+            solicitud.utm_source = utms.get("utm_source", "")[:100]
+            solicitud.utm_medium = utms.get("utm_medium", "")[:100]
+            solicitud.utm_campaign = utms.get("utm_campaign", "")[:150]
+            solicitud.utm_content = utms.get("utm_content", "")[:150]
+            if utms.get("utm_source"):
+                solicitud.fuente_origen = utms.get("utm_source")[:100]
+
             solicitud.save()
+
+            # Vincular o registrar establecimiento y contacto (Ajustes #5, #7, #8, #9)
+            est_obj, contacto_obj = cls._vincular_o_crear_entidades(solicitud, form_data)
+            solicitud.establecimiento_ref = est_obj
+            solicitud.contacto_ref = contacto_obj
 
             total_calculado = Decimal("0")
             for item in items:
@@ -305,10 +319,23 @@ class SubmissionService:
                 )
 
             solicitud.total_referencial_estimado = total_calculado
-            solicitud.save(update_fields=["total_referencial_estimado"])
+            solicitud.save(update_fields=["total_referencial_estimado", "establecimiento_ref", "contacto_ref"])
 
             # Vaciar la sesión
             CartService.vaciar_canasta(request)
+
+        # Telemetría de envío de solicitud (Ajuste Obligatorio #1)
+        try:
+            from apps.gestion.services_telemetria import TelemetriaService
+            TelemetriaService.registrar_evento(
+                request,
+                tipo_evento="ENVIAR_SOLICITUD",
+                solicitud=solicitud,
+                establecimiento=solicitud.establecimiento_ref,
+                metadata={"cart_items_count": len(items)}
+            )
+        except Exception:
+            pass
 
         # Regla: GUARDAR PRIMERO, NOTIFICAR DESPUÉS.
         # Commit de BD ya garantizado. Notificar por correo de forma resiliente.
@@ -323,3 +350,68 @@ class SubmissionService:
             )
 
         return solicitud
+
+    @classmethod
+    def _vincular_o_crear_entidades(cls, solicitud, form_data):
+        from apps.cotizaciones.models import Establecimiento, Contacto
+        from apps.core.normalizacion import normalizar_texto_busqueda, normalizar_email, normalizar_rut
+        from django.utils import timezone
+
+        now = timezone.now()
+        nombre_est = form_data["establecimiento"].strip()
+        nombre_norm = normalizar_texto_busqueda(nombre_est)
+        comuna = form_data["comuna"].strip()
+        region = form_data["region"].strip()
+        rut_est = normalizar_rut(form_data.get("rut_institucion", ""))
+        tipo_inst = form_data.get("tipo_institucion", "").strip()
+
+        # Jerarquía de match (Ajuste Obligatorio #5 de Humm):
+        # Nivel 1: Identificador fuerte si existe RUT
+        est = None
+        if rut_est:
+            est = Establecimiento.objects.filter(rut=rut_est).first()
+
+        # Nivel 2: Coincidencia segura (nombre completo normalizado + comuna) sin quitar palabras institucionales
+        if not est and nombre_norm and comuna:
+            est = Establecimiento.objects.filter(nombre_normalizado=nombre_norm, comuna__iexact=comuna).first()
+
+        if est:
+            est.ultima_interaccion = now
+            if rut_est and not est.rut:
+                est.rut = rut_est
+            est.save(update_fields=["ultima_interaccion", "rut", "updated_at"])
+        else:
+            est = Establecimiento.objects.create(
+                nombre=nombre_est,
+                tipo_institucion=tipo_inst,
+                comuna=comuna,
+                region=region,
+                rut=rut_est,
+                primera_interaccion=now,
+                ultima_interaccion=now,
+            )
+
+        # Contacto (Ajustes #7 y #8)
+        email_contacto = normalizar_email(form_data["email"])
+        nombre_contacto = form_data["nombre_solicitante"].strip()
+        telefono = form_data["telefono"].strip()
+        cargo = form_data.get("cargo_solicitante", "").strip()
+
+        contacto = Contacto.objects.filter(email=email_contacto).first()
+        if contacto:
+            contacto.ultima_interaccion = now
+            if not contacto.establecimiento_principal:
+                contacto.establecimiento_principal = est
+            contacto.save(update_fields=["ultima_interaccion", "establecimiento_principal", "updated_at"])
+        else:
+            contacto = Contacto.objects.create(
+                establecimiento_principal=est,
+                nombre=nombre_contacto,
+                cargo=cargo,
+                email=email_contacto,
+                telefono=telefono,
+                primera_interaccion=now,
+                ultima_interaccion=now,
+            )
+
+        return est, contacto
