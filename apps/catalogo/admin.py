@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Proveedor, Categoria, TecnologiaCompatible, Producto, ProductoImagen
+from .models import Proveedor, Categoria, TecnologiaCompatible, Producto, ProductoImagen, PrecioProveedorTramo
 
 
 class TieneImagenFilter(admin.SimpleListFilter):
@@ -35,6 +35,13 @@ class ProductoImagenInline(admin.TabularInline):
                 obj.archivo.url,
             )
         return format_html('<span style="color: #999;">Sin imagen</span>')
+
+
+class PrecioProveedorTramoInline(admin.TabularInline):
+    model = PrecioProveedorTramo
+    extra = 0
+    fields = ("cantidad_minima", "cantidad_maxima", "precio_usd", "es_anomalo", "estado_validacion", "fecha_actualizacion")
+    readonly_fields = ("fecha_actualizacion",)
 
 
 @admin.register(Proveedor)
@@ -99,7 +106,7 @@ class ProductoAdmin(admin.ModelAdmin):
     )
     list_editable = ("publicado",)
     filter_horizontal = ("tecnologias_verificadas", "tecnologias_compatibles")
-    inlines = [ProductoImagenInline]
+    inlines = [ProductoImagenInline, PrecioProveedorTramoInline]
 
     @admin.display(description="Foto")
     def miniatura_admin(self, obj):
@@ -256,3 +263,23 @@ class ProductoAdmin(admin.ModelAdmin):
             prod.calcular_precios_sugeridos()
             prod.save()
         self.message_user(request, f"Precios sugeridos recalculados para {queryset.count()} productos.")
+
+
+@admin.register(PrecioProveedorTramo)
+class PrecioProveedorTramoAdmin(admin.ModelAdmin):
+    list_display = (
+        "producto",
+        "proveedor",
+        "cantidad_minima",
+        "cantidad_maxima",
+        "precio_usd",
+        "es_anomalo",
+        "estado_validacion",
+        "fecha_actualizacion",
+    )
+    list_filter = ("es_anomalo", "estado_validacion", "proveedor")
+    search_fields = (
+        "producto__sku_humm",
+        "producto__sku_proveedor",
+        "producto__nombre_comercial",
+    )

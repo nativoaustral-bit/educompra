@@ -271,6 +271,11 @@ class Producto(models.Model):
         verbose_name="Observaciones de Validación Técnica",
         help_text="Evidencias, notas de laboratorio o pruebas físicas."
     )
+    features_proveedor = models.TextField(
+        blank=True,
+        verbose_name="Features del Proveedor",
+        help_text="Características técnicas y pedagógicas originales entregadas por el proveedor en la lista comercial. No se copian directamente al frontend público."
+    )
 
     # Costos y Precios Sugeridos
     costo_proveedor_usd = models.DecimalField(
@@ -421,3 +426,67 @@ class ProductoImagen(models.Model):
 
     def __str__(self):
         return f"Imagen para {self.producto.sku_humm} ({'Principal' if self.es_principal else 'Secundaria'})"
+
+
+class PrecioProveedorTramo(models.Model):
+    """
+    Tramos de precios por volumen informados por el proveedor (Q1-9, Q10-49, Q50-100, Q101-300).
+    Permite conservar la escala mayorista para cotizaciones institucionales sin modificar
+    el precio público general de EduCompra (que utiliza Q1-9 como costo base).
+    """
+    ESTADOS_VALIDACION = [
+        ("VALIDADO", "Validado (Escala lógica no creciente)"),
+        ("VALIDO", "Válido (Escala lógica no creciente)"),
+        ("PRECIO_PROVEEDOR_REQUIERE_REVISION", "Requiere revisión (Anomalía detectada)"),
+    ]
+
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.CASCADE,
+        related_name="precios_tramos",
+        verbose_name="Producto"
+    )
+    proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.PROTECT,
+        related_name="precios_tramos",
+        verbose_name="Proveedor"
+    )
+    cantidad_minima = models.PositiveIntegerField(verbose_name="Cantidad Mínima (Desde)")
+    cantidad_maxima = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Cantidad Máxima (Hasta)"
+    )
+    precio_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Precio Unitario Proveedor (USD)"
+    )
+    es_anomalo = models.BooleanField(
+        default=False,
+        verbose_name="Es Anómalo",
+        help_text="True si el precio es mayor al tramo de menor volumen."
+    )
+    estado_validacion = models.CharField(
+        max_length=45,
+        choices=ESTADOS_VALIDACION,
+        default="VALIDADO",
+        verbose_name="Estado de Validación"
+    )
+    notas_validacion = models.TextField(
+        blank=True,
+        verbose_name="Notas de Validación / Motivo Anomalía"
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True, verbose_name="Fecha de Actualización")
+
+    class Meta:
+        verbose_name = "Tramo de Precio Proveedor"
+        verbose_name_plural = "Tramos de Precios Proveedor"
+        ordering = ["producto", "cantidad_minima"]
+        unique_together = [("producto", "proveedor", "cantidad_minima")]
+
+    def __str__(self):
+        max_str = str(self.cantidad_maxima) if self.cantidad_maxima else "+"
+        return f"{self.producto.sku_humm} (Q{self.cantidad_minima}-{max_str}): US${self.precio_usd}"
+

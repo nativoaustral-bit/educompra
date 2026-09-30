@@ -17,7 +17,7 @@ from django.db import transaction
 from PIL import Image
 import openpyxl
 
-from apps.catalogo.models import Proveedor, Categoria, Producto, ProductoImagen
+from apps.catalogo.models import Proveedor, Categoria, Producto, ProductoImagen, PrecioProveedorTramo
 from apps.core.models import ConfiguracionPricing
 from apps.gestion.services_auditoria import registrar_actividad
 
@@ -190,37 +190,143 @@ class ImportacionCatalogoService:
                         if tok_base and img_file not in banco_imagenes[tok_base]:
                             banco_imagenes[tok_base].append(img_file)
 
-        # 3. Leer Excel
-        wb = openpyxl.load_workbook(excel_p, read_only=True, data_only=True)
+    FORMATO_MAESTRO_ANTIGUO = "FORMATO_MAESTRO_ANTIGUO"
+    FORMATO_LISTA_COMERCIAL_NUEVA = "FORMATO_LISTA_COMERCIAL_NUEVA"
+
+    SKUS_CONFLICTIVOS_HISTORICOS = {
+        "KS0077", "KS0078", "KS0079", "KS0240", "KS0080",
+        "KS0081", "KS0082", "KS0400", "KS0401", "60720227",
+        "KS0801", "KS4031", "KS4032", "KS0536", "KS0537"
+    }
+
+    @classmethod
+    def detectar_formato(cls, sheet):
+        """
+        Analiza las primeras 15 filas de la hoja para determinar si corresponde a:
+        - FORMATO_LISTA_COMERCIAL_NUEVA (Contiene columnas de volumen Q1-9, Q10-49, etc.)
+        - FORMATO_MAESTRO_ANTIGUO (Catálogo maestro original con SKU o ID, Descripción, Precio USD)
+        """
+        for row in sheet.iter_rows(max_row=15, values_only=True):
+            if not row or not any(row):
+                continue
+            row_strs = [str(c).upper().strip() for c in row if c is not None]
+            row_concat = " ".join(row_strs)
+
+            if any("Q1-9" in s or "Q1 - 9" in s or "Q1_9" in s for s in row_strs) or "Q1-9" in row_concat:
+                return cls.FORMATO_LISTA_COMERCIAL_NUEVA
+
+            if any("SKU" in s for s in row_strs) and any("DESCRIPC" in s or "PRECIO" in s for s in row_strs):
+                return cls.FORMATO_MAESTRO_ANTIGUO
+
+        raise ValidationError("No se detectó un formato reconocido en las primeras 15 filas de la planilla.")
+
+    @classmethod
+    def validar_tramos_volumen(cls, q1_9, q10_49, q50_100, q101_300):
+        """
+        Valida la monotonicidad lógica decreciente de los tramos de precio por volumen.
+        Regla comercial: Q1-9 >= Q10-49 >= Q50-100 >= Q101-300.
+        Si un tramo de mayor volumen es superior al tramo anterior, se marca como
+        PRECIO_PROVEEDOR_REQUIERE_REVISION y se aísla de uso automático.
+        """
+        tramos_def = [
+            (1, 9, q1_9, "Q1-9"),
+            (10, 49, q10_49, "Q10-49"),
+            (50, 100, q50_100, "Q50-100"),
+            (101, 300, q101_300, "Q101-300"),
+        ]
+        tramos_resultado = []
+        anomalias = []
+        tiene_anomalia = False
+
+        ultimo_precio_valido = None
+        for min_cant, max_cant, precio, etiqueta in tramos_def:
+            if precio is None:
+                continue
+            es_anomalo = False
+            estado_val = "VALIDADO"
+            notas = ""
+
+            if precio <= Decimal("0.00"):
+                es_anomalo = True
+                estado_val = "PRECIO_PROVEEDOR_REQUIERE_REVISION"
+                notas = f"Precio en tramo {etiqueta} no es positivo (USD ${precio})."
+                anomalias.append(notas)
+                tiene_anomalia = True
+            elif ultimo_precio_valido is not None and precio > ultimo_precio_valido:
+                es_anomalo = True
+                estado_val = "PRECIO_PROVEEDOR_REQUIERE_REVISION"
+                notas = f"Anomalía en {etiqueta}: precio USD ${precio} excede el tramo previo (${ultimo_precio_valido})."
+                anomalias.append(notas)
+                tiene_anomalia = True
+            else:
+                ultimo_precio_valido = precio
+
+            tramos_resultado.append({
+                "cantidad_minima": min_cant,
+                "cantidad_maxima": max_cant,
+                "precio_usd": precio,
+                "es_anomalo": es_anomalo,
+                "estado_validacion": estado_val,
+                "notas_validacion": notas,
+                "etiqueta": etiqueta,
+            })
+
+        return tramos_resultado, tiene_anomalia, anomalias
+
+    @classmethod
+    def procesar_catalogo(cls, excel_path, imagenes_dir=None, is_dry_run=True,
+                          actualizar_costos=True, limite=0, usuario=None, lote=None, request=None,
+                          skus_filtro=None):
+        """
+        Ejecuta el procesamiento integral del catálogo:
+        - Detecta automáticamente el formato (Maestro original o Lista comercial nueva con tramos)
+        - Soporta --dry-run (sin modificaciones en base de datos)
+        - Soporta filtro específico por lista de SKUs
+        - Valida tramos de precios por volumen y monotonicidad
+        - Detecta SKUs únicos y conflictivos
+        - Preserva estrictamente la curaduría existente (Ajuste #18)
+        - Aplica nuevos productos con publicado=False y SIN_REVISAR (Ajuste #17)
+        - Retorna reporte consolidado estructurado
+        """
+        excel_p = Path(excel_path)
+        cls.validar_archivo_excel(excel_p)
+
+        imagenes_p = Path(imagenes_dir) if imagenes_dir else None
+        if imagenes_p and not imagenes_p.exists():
+            imagenes_p = None
+
+        skus_filtro_set = {str(s).strip().upper() for s in skus_filtro} if skus_filtro else None
+
+        # 1. Parámetros de Pricing
+        pricing_config = ConfiguracionPricing.get_solo()
+        tc = pricing_config.tipo_cambio_usd_clp
+        factor_int = pricing_config.factor_internacion_flete_porcentaje
+        recargo_comercial = pricing_config.recargo_general_porcentaje
+        iva = pricing_config.iva_porcentaje
+
+        # 2. Indizar banco de imágenes
+        banco_imagenes = defaultdict(list)
+        imagenes_totales_banco = 0
+        if imagenes_p and imagenes_p.is_dir():
+            for img_file in imagenes_p.iterdir():
+                if img_file.is_file() and img_file.suffix.lower() in cls.EXTENSIONES_IMAGEN_VALIDAS:
+                    imagenes_totales_banco += 1
+                    stem = img_file.stem.upper().strip()
+                    if img_file not in banco_imagenes[stem]:
+                        banco_imagenes[stem].append(img_file)
+                    tokens = [t.strip() for t in re.split(r"[\s]+|-(?=[A-Za-z0-9]{4,})", stem) if t.strip()]
+                    for tok in tokens:
+                        if img_file not in banco_imagenes[tok]:
+                            banco_imagenes[tok].append(img_file)
+                        tok_base = re.split(r"[-_]\d+$", tok)[0]
+                        if tok_base and img_file not in banco_imagenes[tok_base]:
+                            banco_imagenes[tok_base].append(img_file)
+
+        # 3. Leer Excel y detectar formato
+        wb = openpyxl.load_workbook(excel_p, data_only=True)
         sheet = wb.active
 
-        header_row = None
-        for row in sheet.iter_rows(max_row=5, values_only=True):
-            if any(isinstance(c, str) and ("SKU" in c.upper() or "DESCRIPCI" in c.upper()) for c in row if c):
-                header_row = [str(c).strip() if c else "" for c in row]
-                break
-
-        if not header_row:
-            wb.close()
-            raise ValidationError("No se encontró fila de encabezados válida en las primeras 5 filas del Excel.")
-
-        col_map = {}
-        for idx, col in enumerate(header_row):
-            col_upper = col.upper()
-            if "SKU" in col_upper or "ID" in col_upper:
-                col_map["sku"] = idx
-            elif "DESCRIPCI" in col_upper or "PRODUCTO" in col_upper:
-                col_map["descripcion"] = idx
-            elif "MINIATURA" in col_upper:
-                col_map["miniatura"] = idx
-            elif "PRECIO" in col_upper:
-                col_map["precio"] = idx
-            elif "ALTA RESOLUCI" in col_upper or "IMAGEN ALTA" in col_upper:
-                col_map["imagen_hd"] = idx
-
-        if "sku" not in col_map or "descripcion" not in col_map or "precio" not in col_map:
-            wb.close()
-            raise ValidationError(f"Faltan columnas requeridas (SKU, Descripción, Precio). Encabezados: {header_row}")
+        formato_detectado = cls.detectar_formato(sheet)
 
         filas_totales_leidas = 0
         filas_sin_sku = 0
@@ -228,37 +334,176 @@ class ImportacionCatalogoService:
         precios_no_interpretables = 0
         registros_por_sku = defaultdict(list)
 
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if limite > 0 and filas_totales_leidas >= limite:
-                break
-            if not any(row):
-                continue
-            filas_totales_leidas += 1
+        if formato_detectado == cls.FORMATO_MAESTRO_ANTIGUO:
+            header_row = None
+            header_row_idx = 1
+            for idx, row in enumerate(sheet.iter_rows(max_row=10, values_only=True), start=1):
+                if any(isinstance(c, str) and ("SKU" in c.upper() or "DESCRIPCI" in c.upper()) for c in row if c):
+                    header_row = [str(c).strip() if c else "" for c in row]
+                    header_row_idx = idx
+                    break
 
-            raw_sku = row[col_map["sku"]] if col_map["sku"] < len(row) else None
-            raw_desc = row[col_map["descripcion"]] if col_map["descripcion"] < len(row) else None
-            raw_precio = row[col_map["precio"]] if col_map["precio"] < len(row) else None
+            if not header_row:
+                wb.close()
+                raise ValidationError("No se encontró fila de encabezados válida en el catálogo maestro.")
 
-            if not raw_sku or not str(raw_sku).strip():
-                filas_sin_sku += 1
-                continue
-            if raw_precio is None or str(raw_precio).strip() == "":
-                filas_sin_precio += 1
-                continue
+            col_map = {}
+            for idx, col in enumerate(header_row):
+                col_upper = col.upper()
+                if "SKU" in col_upper or "ID" in col_upper:
+                    col_map["sku"] = idx
+                elif "DESCRIPCI" in col_upper or "PRODUCTO" in col_upper:
+                    col_map["descripcion"] = idx
+                elif "MINIATURA" in col_upper:
+                    col_map["miniatura"] = idx
+                elif "PRECIO" in col_upper:
+                    col_map["precio"] = idx
+                elif "ALTA RESOLUCI" in col_upper or "IMAGEN ALTA" in col_upper:
+                    col_map["imagen_hd"] = idx
 
-            precio_usd = parse_precio_usd(raw_precio)
-            if precio_usd is None or precio_usd <= 0:
-                precios_no_interpretables += 1
-                continue
+            if "sku" not in col_map or "descripcion" not in col_map or "precio" not in col_map:
+                wb.close()
+                raise ValidationError(f"Faltan columnas requeridas (SKU, Descripción, Precio) en formato maestro.")
 
-            sku_norm = str(raw_sku).strip().upper()
-            desc_norm = str(raw_desc).strip() if raw_desc else ""
+            for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+                if limite > 0 and filas_totales_leidas >= limite:
+                    break
+                if not any(row):
+                    continue
+                filas_totales_leidas += 1
 
-            registros_por_sku[sku_norm].append({
-                "sku": sku_norm,
-                "descripcion": desc_norm,
-                "precio_usd": precio_usd,
-            })
+                raw_sku = row[col_map["sku"]] if col_map["sku"] < len(row) else None
+                raw_desc = row[col_map["descripcion"]] if col_map["descripcion"] < len(row) else None
+                raw_precio = row[col_map["precio"]] if col_map["precio"] < len(row) else None
+
+                if not raw_sku or not str(raw_sku).strip():
+                    filas_sin_sku += 1
+                    continue
+                if raw_precio is None or str(raw_precio).strip() == "":
+                    filas_sin_precio += 1
+                    continue
+
+                sku_norm = str(raw_sku).strip().upper()
+                if skus_filtro_set and sku_norm not in skus_filtro_set:
+                    continue
+
+                precio_usd = parse_precio_usd(raw_precio)
+                if precio_usd is None or precio_usd <= Decimal("0.00"):
+                    precios_no_interpretables += 1
+                    continue
+
+                desc_norm = str(raw_desc).strip() if raw_desc else ""
+                tramos_base = [{
+                    "cantidad_minima": 1,
+                    "cantidad_maxima": None,
+                    "precio_usd": precio_usd,
+                    "es_anomalo": False,
+                    "estado_validacion": "VALIDADO",
+                    "notas_validacion": "",
+                    "etiqueta": "Base (1+)",
+                }]
+
+                registros_por_sku[sku_norm].append({
+                    "sku": sku_norm,
+                    "nombre": desc_norm,
+                    "descripcion": desc_norm,
+                    "features": "",
+                    "precio_usd": precio_usd,
+                    "q1_9": precio_usd,
+                    "q10_49": None,
+                    "q50_100": None,
+                    "q101_300": None,
+                    "tramos": tramos_base,
+                    "tiene_anomalia_precio": False,
+                    "anomalias_detalle": [],
+                })
+
+        elif formato_detectado == cls.FORMATO_LISTA_COMERCIAL_NUEVA:
+            col_map = {}
+            for row in sheet.iter_rows(values_only=True):
+                if limite > 0 and filas_totales_leidas >= limite:
+                    break
+                if not row or not any(row):
+                    continue
+
+                # Filtrar filas que solo sean títulos de sección (ej: "HOT PRODUCTS", "FOR ARDUINO")
+                celdas_con_valor = [c for c in row if c is not None and str(c).strip()]
+                if len(celdas_con_valor) <= 1:
+                    continue
+
+                # Verificar si es una fila de encabezados repetida
+                fila_strs = [str(c).upper().strip() if c is not None else "" for c in row]
+                if any("SKU" in s for s in fila_strs) and any("Q1-9" in s or "Q1 - 9" in s or "PRODUCT" in s for s in fila_strs):
+                    # Actualizar mapeo de columnas
+                    col_map = {}
+                    for idx, s in enumerate(fila_strs):
+                        if "SKU" in s:
+                            col_map["sku"] = idx
+                        elif "PRODUCT" in s or "NAME" in s or "DESCRIPCI" in s:
+                            col_map["nombre"] = idx
+                        elif "FEATURE" in s:
+                            col_map["features"] = idx
+                        elif "Q1-9" in s or "Q1 - 9" in s or "Q1_9" in s:
+                            col_map["q1_9"] = idx
+                        elif "Q10-49" in s or "Q10 - 49" in s or "Q10_49" in s:
+                            col_map["q10_49"] = idx
+                        elif "Q50-100" in s or "Q50 - 100" in s or "Q50_100" in s:
+                            col_map["q50_100"] = idx
+                        elif "Q101-300" in s or "Q101 - 300" in s or "Q101_300" in s:
+                            col_map["q101_300"] = idx
+                    continue
+
+                if "sku" not in col_map or "q1_9" not in col_map:
+                    continue
+
+                raw_sku = row[col_map["sku"]] if col_map["sku"] < len(row) else None
+                if not raw_sku or not str(raw_sku).strip():
+                    filas_sin_sku += 1
+                    continue
+
+                sku_clean = str(raw_sku).strip().upper()
+                if sku_clean == "SKU":
+                    continue
+
+                filas_totales_leidas += 1
+
+                if skus_filtro_set and sku_clean not in skus_filtro_set:
+                    continue
+
+                raw_name = str(row[col_map["nombre"]]).strip() if "nombre" in col_map and col_map["nombre"] < len(row) and row[col_map["nombre"]] is not None else ""
+                raw_features = str(row[col_map["features"]]).strip() if "features" in col_map and col_map["features"] < len(row) and row[col_map["features"]] is not None else ""
+
+                raw_q1_9 = row[col_map["q1_9"]] if "q1_9" in col_map and col_map["q1_9"] < len(row) else None
+                raw_q10_49 = row[col_map["q10_49"]] if "q10_49" in col_map and col_map["q10_49"] < len(row) else None
+                raw_q50_100 = row[col_map["q50_100"]] if "q50_100" in col_map and col_map["q50_100"] < len(row) else None
+                raw_q101_300 = row[col_map["q101_300"]] if "q101_300" in col_map and col_map["q101_300"] < len(row) else None
+
+                p_q1_9 = parse_precio_usd(raw_q1_9)
+                p_q10_49 = parse_precio_usd(raw_q10_49)
+                p_q50_100 = parse_precio_usd(raw_q50_100)
+                p_q101_300 = parse_precio_usd(raw_q101_300)
+
+                if p_q1_9 is None or p_q1_9 <= Decimal("0.00"):
+                    filas_sin_precio += 1
+                    precios_no_interpretables += 1
+                    continue
+
+                tramos_res, tiene_anomalia, anomalias = cls.validar_tramos_volumen(p_q1_9, p_q10_49, p_q50_100, p_q101_300)
+
+                registros_por_sku[sku_clean].append({
+                    "sku": sku_clean,
+                    "nombre": raw_name,
+                    "descripcion": raw_name,
+                    "features": raw_features,
+                    "precio_usd": p_q1_9,
+                    "q1_9": p_q1_9,
+                    "q10_49": p_q10_49,
+                    "q50_100": p_q50_100,
+                    "q101_300": p_q101_300,
+                    "tramos": tramos_res,
+                    "tiene_anomalia_precio": tiene_anomalia,
+                    "anomalias_detalle": anomalias,
+                })
 
         wb.close()
 
@@ -280,13 +525,14 @@ class ImportacionCatalogoService:
         candidatos_validos = {**skus_simples, **skus_duplicados_identicos}
 
         # 5. Comparar contra base de datos existente
-        skus_existentes_qs = Producto.objects.filter(sku_proveedor__in=candidatos_validos.keys())
+        skus_existentes_qs = Producto.objects.filter(sku_proveedor__in=candidatos_validos.keys()).select_related("categoria")
         existentes_map = {p.sku_proveedor: p for p in skus_existentes_qs}
 
         productos_nuevos_count = 0
         productos_actualizados_costo = 0
         productos_sin_cambios = 0
         conflictos_count = len(skus_conflictivos)
+        anomalias_precio_count = 0
         productos_sin_imagen = 0
         imagenes_asociadas = 0
 
@@ -294,6 +540,8 @@ class ImportacionCatalogoService:
         precio_min = min(precios_usd_validos) if precios_usd_validos else Decimal("0.00")
         precio_max = max(precios_usd_validos) if precios_usd_validos else Decimal("0.00")
         precio_prom = sum(precios_usd_validos) / len(precios_usd_validos) if precios_usd_validos else Decimal("0.00")
+
+        detalle_skus = []
 
         # Proveedor y categoría base
         prov, _ = Proveedor.objects.get_or_create(
@@ -305,30 +553,104 @@ class ImportacionCatalogoService:
             defaults={"descripcion": "Componentes pendientes de curaduría pedagógica"}
         )
 
+        for sku, data in candidatos_validos.items():
+            prod_existente = existentes_map.get(sku)
+            tiene_img = bool(banco_imagenes.get(sku)) or (prod_existente.imagenes.exists() if prod_existente else False)
+            if data.get("tiene_anomalia_precio"):
+                anomalias_precio_count += 1
+
+            costo_ant = prod_existente.costo_proveedor_usd if prod_existente else None
+            q1_9_val = data["precio_usd"]
+            diff_costo = (q1_9_val - costo_ant) if costo_ant is not None else None
+            diff_pct = ((diff_costo / costo_ant) * 100) if (costo_ant and costo_ant > 0) else None
+
+            es_historico = sku in cls.SKUS_CONFLICTIVOS_HISTORICOS
+
+            if sku == "KS0540":
+                accion_prop = (
+                    "Actualizar costos y tramos de proveedor + preparar curaduría Humm prioritaria: "
+                    "'Kit Inicial Arduino con Placa Controladora — 20 Proyectos Guiados' "
+                    "(Categoría: Kits educativos iniciales, Nivel: INICIAL, diferenciándolo explícitamente "
+                    "de KS0541 que no incluye placa controladora)."
+                )
+            elif prod_existente:
+                if prod_existente.publicado:
+                    accion_prop = "Actualizar información de proveedor y tramos de volumen preservando estrictamente curaduría Humm y publicación."
+                else:
+                    accion_prop = "Actualizar información de proveedor y tramos de volumen + mantener en catálogo interno para curaduría pedagógica."
+            else:
+                accion_prop = "Crear nuevo registro (activo=True, publicado=False, estado_curaduria='SIN_REVISAR', placeholder SIN_IMAGEN) + registrar tramos de volumen."
+
+            if es_historico:
+                accion_prop = f"[ALERTA CONFLICTO HISTÓRICO] {accion_prop}"
+
+            if prod_existente:
+                estado_actual = "EXISTENTE / PUBLICADO" if prod_existente.publicado else "EXISTENTE / NO PUBLICADO"
+            else:
+                estado_actual = "NUEVO SKU (NO EXISTE EN BD)"
+
+            if es_historico:
+                estado_actual += " [CONFLICTO HISTÓRICO]"
+
+            detalle_skus.append({
+                "sku": sku,
+                "nombre_proveedor": data.get("nombre", ""),
+                "features": data.get("features", ""),
+                "existe": prod_existente is not None,
+                "publicado": prod_existente.publicado if prod_existente else False,
+                "estado_curaduria": prod_existente.estado_curaduria if prod_existente else "SIN_REVISAR",
+                "estado_actual": estado_actual,
+                "costo_anterior": float(costo_ant) if costo_ant is not None else None,
+                "q1_9": float(q1_9_val),
+                "q10_49": float(data["q10_49"]) if data.get("q10_49") is not None else None,
+                "q50_100": float(data["q50_100"]) if data.get("q50_100") is not None else None,
+                "q101_300": float(data["q101_300"]) if data.get("q101_300") is not None else None,
+                "diferencia_costo": float(diff_costo) if diff_costo is not None else None,
+                "diferencia_porcentaje": round(float(diff_pct), 1) if diff_pct is not None else None,
+                "conflicto_historico": es_historico,
+                "tiene_anomalia_precio": data.get("tiene_anomalia_precio", False),
+                "anomalias_detalle": data.get("anomalias_detalle", []),
+                "accion_propuesta": accion_prop,
+                "tiene_imagen_banco": tiene_img,
+            })
+
+            if prod_existente:
+                if prod_existente.costo_proveedor_usd != data["precio_usd"]:
+                    productos_actualizados_costo += 1
+                else:
+                    productos_sin_cambios += 1
+            else:
+                productos_nuevos_count += 1
+
+            if tiene_img:
+                imagenes_asociadas += 1
+            else:
+                productos_sin_imagen += 1
+
         # 6. Ejecución definitiva si no es dry-run
         if not is_dry_run:
             with transaction.atomic():
                 for sku, data in candidatos_validos.items():
                     prod_existente = existentes_map.get(sku)
                     if prod_existente:
-                        # Producto existente: solo actualizar costo USD si cambió (Ajuste #18: Preservación Curaduría)
+                        # Actualizar información de proveedor sin alterar curaduría Humm (Ajuste #18)
+                        prod_existente.nombre_original_proveedor = data.get("nombre") or prod_existente.nombre_original_proveedor
+                        if data.get("features"):
+                            prod_existente.features_proveedor = data["features"]
                         if actualizar_costos and prod_existente.costo_proveedor_usd != data["precio_usd"]:
                             prod_existente.costo_proveedor_usd = data["precio_usd"]
-                            prod_existente.save()  # recalcula sugeridos
-                            productos_actualizados_costo += 1
-                        else:
-                            productos_sin_cambios += 1
+                        prod_existente.save()
                         prod_target = prod_existente
                     else:
-                        # Producto nuevo: publicado=False, estado_curaduria='SIN_REVISAR' (Ajuste #17)
                         prod_nuevo = Producto(
                             sku_humm=f"HUMM-KEY-{sku}",
                             sku_proveedor=sku,
                             proveedor=prov,
                             categoria=cat_sin_clasificar,
                             marca="Keyestudio",
-                            nombre_comercial=data["descripcion"] or f"Componente Keyestudio {sku}",
-                            nombre_original_proveedor=data["descripcion"] or "",
+                            nombre_comercial=data.get("nombre") or f"Componente Keyestudio {sku}",
+                            nombre_original_proveedor=data.get("nombre") or "",
+                            features_proveedor=data.get("features") or "",
                             costo_proveedor_usd=data["precio_usd"],
                             publicado=False,
                             activo=True,
@@ -336,47 +658,43 @@ class ImportacionCatalogoService:
                             estado_especificacion_neutral="NO_REVISADO",
                         )
                         prod_nuevo.save()
-                        productos_nuevos_count += 1
                         prod_target = prod_nuevo
 
-                    # Manejo de imágenes
-                    archivos_img = banco_imagenes.get(sku, [])
-                    if archivos_img:
-                        imagenes_asociadas += 1
-                        # Si no tiene imágenes, asociar
-                        if not prod_target.imagenes.exists():
-                            for idx, img_src in enumerate(archivos_img[:5]):
-                                dest_media = Path(settings.MEDIA_ROOT) / "catalogo" / "originales" / img_src.name
-                                optimizar_imagen(img_src, dest_media)
-                                ProductoImagen.objects.create(
-                                    producto=prod_target,
-                                    archivo=f"catalogo/originales/{img_src.name}",
-                                    nombre_archivo_original=img_src.name,
-                                    es_principal=(idx == 0),
-                                    orden=idx,
-                                )
-                    else:
-                        productos_sin_imagen += 1
-        else:
-            # En dry-run solo calcular estadísticas
-            for sku, data in candidatos_validos.items():
-                prod_existente = existentes_map.get(sku)
-                if prod_existente:
-                    if prod_existente.costo_proveedor_usd != data["precio_usd"]:
-                        productos_actualizados_costo += 1
-                    else:
-                        productos_sin_cambios += 1
-                else:
-                    productos_nuevos_count += 1
+                    # Registrar/actualizar tramos de volumen de proveedor
+                    for tramo in data.get("tramos", []):
+                        if tramo.get("precio_usd") is not None:
+                            PrecioProveedorTramo.objects.update_or_create(
+                                producto=prod_target,
+                                proveedor=prov,
+                                cantidad_minima=tramo["cantidad_minima"],
+                                defaults={
+                                    "cantidad_maxima": tramo.get("cantidad_maxima"),
+                                    "precio_usd": tramo["precio_usd"],
+                                    "es_anomalo": tramo.get("es_anomalo", False),
+                                    "estado_validacion": tramo.get("estado_validacion", "VALIDADO"),
+                                    "notas_validacion": tramo.get("notas_validacion", ""),
+                                }
+                            )
 
-                if banco_imagenes.get(sku):
-                    imagenes_asociadas += 1
-                else:
-                    productos_sin_imagen += 1
+                    # Manejo de imágenes (sin sobrescribir existentes)
+                    archivos_img = banco_imagenes.get(sku, [])
+                    if archivos_img and not prod_target.imagenes.exists():
+                        for idx, img_src in enumerate(archivos_img[:5]):
+                            dest_media = Path(settings.MEDIA_ROOT) / "catalogo" / "originales" / img_src.name
+                            optimizar_imagen(img_src, dest_media)
+                            ProductoImagen.objects.create(
+                                producto=prod_target,
+                                archivo=f"catalogo/originales/{img_src.name}",
+                                nombre_archivo_original=img_src.name,
+                                es_principal=(idx == 0),
+                                orden=idx,
+                            )
 
         # Resumen estructurado
         resumen = {
+            "formato_detectado": formato_detectado,
             "is_dry_run": is_dry_run,
+            "total_filas": filas_totales_leidas,
             "filas_totales_leidas": filas_totales_leidas,
             "filas_sin_sku": filas_sin_sku,
             "filas_sin_precio": filas_sin_precio,
@@ -385,6 +703,7 @@ class ImportacionCatalogoService:
             "skus_simples": len(skus_simples),
             "skus_duplicados_identicos": len(skus_duplicados_identicos),
             "conflictos_detectados": conflictos_count,
+            "anomalias_precio_detectadas": anomalias_precio_count,
             "productos_candidatos": len(candidatos_validos),
             "productos_nuevos": productos_nuevos_count,
             "productos_actualizados": productos_actualizados_costo,
@@ -398,6 +717,7 @@ class ImportacionCatalogoService:
             "skus_conflictivos_lista": [
                 {"sku": k, "filas": v} for k, v in list(skus_conflictivos.items())[:20]
             ],
+            "detalle_skus": detalle_skus,
         }
 
         # Actualizar lote en BD si existe
@@ -426,6 +746,7 @@ class ImportacionCatalogoService:
                 objeto_id=lote.id if lote else "",
                 descripcion=f"Importación de catálogo ejecutada: {productos_nuevos_count} nuevos, {productos_actualizados_costo} costos actualizados.",
                 detalles={
+                    "formato": formato_detectado,
                     "nuevos": productos_nuevos_count,
                     "costos_actualizados": productos_actualizados_costo,
                     "sin_cambios": productos_sin_cambios,
@@ -434,3 +755,4 @@ class ImportacionCatalogoService:
             )
 
         return resumen
+
