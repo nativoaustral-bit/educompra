@@ -2,7 +2,9 @@
 ## Plataforma de Administración Operacional, Gestión Comercial y Telemetría Base
 **EduCompra Humm — `https://educompra.humm.cl/gestion/`**
 *Fecha de Cierre: 30 de Septiembre de 2026*  
-*Estado: IMPLEMENTADA Y VERIFICADA (65/65 Pruebas Exitosas — 100% OK)*
+*Estado: IMPLEMENTADA, SINCRONIZADA EN GITHUB MAIN Y VERIFICADA EN PRODUCCIÓN*  
+*Evidencia Canónica: CÓDIGO LOCAL = GITHUB MAIN = HOSTGATOR = FUNCIONALIDAD /GESTION/*  
+*Suite de Pruebas: 65/65 Pruebas Exitosas (100% OK)*
 
 ---
 
@@ -219,15 +221,101 @@ python manage.py shell -c "from django.db import connection; cursor = connection
    python manage.py migrate --noinput
    ```
    **No se ejecuta `makemigrations` en el servidor de producción** (**Ajuste #26**).
-3. **Respaldo Pre-Despliegue:** Respaldar `db.sqlite3` y verificar `PRAGMA integrity_check;` previo y posterior a la migración (**Ajuste #27**).
-4. **Conciliación Histórica:** El comando `conciliar_establecimientos_historicos` **NO** se incluye en el script automático de deploy. Se ejecutará una única vez de forma controlada tras verificar su `--dry-run` (**Ajuste #28**).
-5. **Roles:** Ejecutar en producción `python manage.py crear_roles_gestion`.
+3. **Respaldo Pre-Despliegue e Integridad SQLite:** Respaldar `db.sqlite3` y verificar `PRAGMA integrity_check;` previo y posterior a la migración (**Ajuste #27**). Ambos chequeos arrojaron resultado `ok`.
+4. **Roles Nativos:** Ejecución automática en el script de despliegue remoto:
+   ```bash
+   python manage.py crear_roles_gestion
+   ```
+   Idempotente y verificado.
+5. **Conciliación Histórica:** El comando `conciliar_establecimientos_historicos` **NO** se ejecuta con `--aplicar` en el script automático de deploy. Se mantiene en `--dry-run` para arbitraje controlado sin alterar datos sin autorización (**Ajuste #28**).
 
 ---
 
-### 12. Punto de Control (Ajuste #33)
+### 12. Evidencia de Sincronización Canónica y Verificación Productiva
 
-Con la entrega de este informe técnico:
-- **Fase 5A se encuentra 100% completada y verificada.**
-- Conforme a la instrucción expresa de Humm, **se detiene el avance aquí**.
-- **NO se iniciará la Fase 5B completa (Dashboards analíticos avanzados) ni Fase 5C sin la revisión y autorización formal de Humm.**
+#### 12.1 Commit Identificable en GitHub `main`:
+- **Commit SHA:** `882710d253b79dccff59451f7432b5a6fde3ad21`
+- **Mensaje:** `feat(fase-5a): plataforma de administracion operacional y telemetria base`
+- **Volumen:** 63 archivos modificados/creados, +9.421 inserciones.
+- **Push exitoso a repositorio canónico:**
+  ```text
+  To https://github.com/nativoaustral-bit/educompra.git
+     40950a8..882710d  main -> main
+  ```
+- **Verificación en GitHub:** Existen en la rama `main` de `nativoaustral-bit/educompra`:
+  - `apps/gestion/models.py`, `apps/gestion/views.py`, `apps/gestion/urls.py`
+  - `apps/gestion/migrations/0001_initial.py`
+  - `apps/cotizaciones/migrations/0005_contacto_establecimiento_and_more.py`
+  - `apps/catalogo/services_importacion.py`
+  - `apps/gestion/tests/test_fase5a_gestion.py`
+
+#### 12.2 Ejecución del Pipeline CI/CD (.github/workflows/deploy.yml):
+- **Empaquetado selectivo:** Tarball limpio conteniendo `apps/gestion`, templates y migraciones. Excluyó `.git`, `.env`, bases de datos, tests y archivos privados.
+- **Transferencia segura:** SCP atómico a HostGator.
+- **Respaldo de BD:** `db.sqlite3.pre_fase5a_*` generado antes de migrar.
+- **Integridad Pre-Migración:** `PRAGMA integrity_check;` = `ok`.
+- **Ejecución de Migraciones:**
+  - `Applying cotizaciones.0005_contacto_establecimiento_and_more... OK`
+  - `Applying gestion.0001_initial... OK`
+- **Integridad Post-Migración:** `PRAGMA integrity_check;` = `ok`.
+- **Creación de Roles Nativos:**
+  - Rol *Administradores EduCompra* creado con 9 permisos nativos.
+  - Rol *Comercial EduCompra* creado con 4 permisos nativos.
+- **Collectstatic y Reinicio:** `tmp/restart.txt` actualizado para reiniciar Passenger WSGI.
+
+#### 12.3 Verificación HTTP Real en Producción (`https://educompra.humm.cl`):
+
+| Endpoint | Código HTTP | Comportamiento Verificado |
+|---|---|---|
+| `https://educompra.humm.cl/` | `200 OK` | Home público operativo |
+| `https://educompra.humm.cl/catalogo/` | `200 OK` | Catálogo público con 72 productos activos |
+| `https://educompra.humm.cl/mi-cotizacion/` | `200 OK` | Carrito de cotización escolar operativo |
+| `https://educompra.humm.cl/admin/login/` | `200 OK` | Django Admin técnico y de respaldo preservado |
+| `https://educompra.humm.cl/gestion/` | `302 Found` | Redirección obligatoria a login (`Location: /gestion/login/?next=/gestion/`) |
+| `https://educompra.humm.cl/gestion/login/` | `200 OK` | Renders `<title>Acceso — Administración EduCompra Humm</title>` |
+
+#### 12.4 Seguridad y Protección de Almacenamiento Privado:
+
+| Recurso / Ruta Sensible | Código HTTP | Estado de Seguridad |
+|---|---|---|
+| `https://educompra.humm.cl/INFORME_IMPLEMENTACION_FASE_5A.md` | `403 Forbidden` | Bloqueado fuera del DocumentRoot |
+| `https://educompra.humm.cl/.env` | `403 Forbidden` | Bloqueado explícitamente por Apache |
+| `https://educompra.humm.cl/.git/HEAD` | `403 Forbidden` | No desplegado ni accesible |
+| `https://educompra.humm.cl/db.sqlite3` | `403 Forbidden` | Bloqueado explícitamente |
+| `https://educompra.humm.cl/private/` | `404 Not Found` | Almacenamiento privado inaccesible vía HTTP |
+
+#### 12.5 Verificación de Telemetría Real en Vivo:
+- Se generaron eventos reales de navegación anónima en producción: `VISITA`, `BUSQUEDA`, `VER_PRODUCTO`, `AGREGAR_COTIZACION`.
+- Se verificó que los registros persisten en base de datos utilizando `session_hash` (HMAC-SHA256 de 64 caracteres).
+- La `session_key` de Django **no** es persistida en la base de datos.
+- Se respetó estrictamente la `METADATA_WHITELIST` (sin PII, emails, RUT ni contraseñas).
+
+#### 12.6 Estado de Conciliación Histórica de Establecimientos:
+- Comando `python manage.py conciliar_establecimientos_historicos --dry-run` probado y listo para ejecución.
+- En cumplimiento estricto de la instrucción de Humm, **NO se ha ejecutado `--aplicar` en producción**.
+- La plataforma de administración opera normalmente mientras se programa la revisión manual de los casos ambiguos.
+
+---
+
+### 13. Declaración de Cumplimiento Canónico
+
+Se certifica el cumplimiento del criterio de cierre exigido:
+
+# CÓDIGO LOCAL = GITHUB MAIN = HOSTGATOR = FUNCIONALIDAD /GESTION/
+
+1. **Código Local:** 65/65 pruebas unitarias e integración aprobadas localmente.
+2. **GitHub Main:** Commit `882710d` presente en el repositorio canónico `nativoaustral-bit/educompra`.
+3. **HostGator:** Desplegado mediante pipeline automático sin `makemigrations` en vivo, base de datos SQLite íntegra (`ok`), roles creados.
+4. **Funcionalidad `/gestion/`:** Redirección de autenticación, pantalla de login Humm, Django Admin técnico intacto y catálogo con 72 productos activos.
+
+Por tanto, la Fase 5A queda formalmente:
+
+# IMPLEMENTADA, SINCRONIZADA Y CERRADA
+
+---
+
+### 14. Punto de Control Estricto (Ajuste #33)
+
+Conforme a la instrucción expresa de Humm:
+- **Se detiene cualquier avance adicional en este punto.**
+- **NO se inicia la Fase 5B (Dashboards analíticos avanzados) ni Fase 5C (Inteligencia Comercial) sin aprobación formal de Humm.**
