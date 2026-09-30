@@ -87,11 +87,12 @@ class CatalogoFase4PublicoTestCase(TestCase):
         self.assertNotContains(response, self.prod_no_publicado.nombre_comercial)
 
     def test_precio_publico_no_muestra_desglose_interno(self):
-        """La ficha pública debe mostrar solo precio referencial con IVA sin desglose neto/costo/recargo."""
+        """La ficha pública debe mostrar solo precio referencial con IVA sin desglose neto/costo/recargo y con separador de miles."""
         url = reverse("catalogo:detalle", kwargs={"slug": self.prod_publicado.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Precio referencial con IVA")
+        self.assertContains(response, "$23.401")
         self.assertNotContains(response, "costo_proveedor")
         self.assertNotContains(response, "recargo")
         self.assertNotContains(response, "internacion")

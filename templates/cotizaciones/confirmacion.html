@@ -68,8 +68,8 @@
             </td>
             <td style="color: #475569; font-size: 0.88rem;">{{ item.unidad_comercial_snapshot }}</td>
             <td style="text-align: center; font-weight: 700;">{{ item.cantidad }}</td>
-            <td style="text-align: right; color: #475569;">${{ item.precio_referencial_unitario_snapshot|floatformat:"0" }}</td>
-            <td style="text-align: right; font-weight: 800; color: #0f172a;">${{ item.subtotal_referencial_snapshot|floatformat:"0" }}</td>
+            <td style="text-align: right; color: #475569;">${{ item.precio_referencial_unitario_snapshot|separador_miles }}</td>
+            <td style="text-align: right; font-weight: 800; color: #0f172a;">${{ item.subtotal_referencial_snapshot|separador_miles }}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -77,7 +77,7 @@
 
     <div style="display:flex; justify-content:flex-end; align-items:center; gap:16px; margin-top:16px; padding-top:16px; border-top:2px solid #e2e8f0;">
       <span style="font-size:1.1rem; color:#475569;">Total Referencial Estimado:</span>
-      <span style="font-size:1.6rem; font-weight:800; color:#1e3a8a;">${{ total_referencial|floatformat:"0" }}</span>
+      <span style="font-size:1.6rem; font-weight:800; color:#1e3a8a;">${{ total_referencial|separador_miles }}</span>
     </div>
 
     <div style="font-size:0.75rem; color:#64748b; text-align:right; margin-top:4px;">

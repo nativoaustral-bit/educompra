@@ -63,7 +63,7 @@
     <!-- Caja de Precio Referencial con IVA (Sin desglose interno) -->
     <div class="detail-price-box">
       <div class="detail-price-main">
-        ${{ producto.precio_sugerido_total_clp|floatformat:"0" }}
+        ${{ producto.precio_sugerido_total_clp|separador_miles }}
       </div>
       <div class="detail-price-legend">
         Precio referencial con IVA incluido (por {{ producto.unidad_compra|default:"unidad" }})
@@ -140,7 +140,7 @@
             <div class="product-bottom-row">
               <div class="price-block">
                 <span class="price-label">Precio ref. con IVA</span>
-                <span class="price-value">${{ rel.precio_sugerido_total_clp|floatformat:"0" }}</span>
+                <span class="price-value">${{ rel.precio_sugerido_total_clp|separador_miles }}</span>
               </div>
               <form action="{% url 'canasta_agregar' %}" method="POST" class="ajax-add-cart">
                 {% csrf_token %}

@@ -117,6 +117,9 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "apps.cotizaciones.context_processors.canasta_context",
             ],
+            "builtins": [
+                "apps.core.templatetags.core_tags",
+            ],
         },
     },
 ]

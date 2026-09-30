@@ -52,7 +52,7 @@
               </td>
 
               <td style="white-space: nowrap; font-weight: 600; color: #334155;">
-                ${{ item.precio_unitario|floatformat:"0" }}
+                ${{ item.precio_unitario|separador_miles }}
                 <div style="font-size: 0.72rem; color: #64748b;">IVA incluido</div>
               </td>
 
@@ -74,7 +74,7 @@
               </td>
 
               <td style="text-align: right; white-space: nowrap; font-weight: 800; font-size: 1.05rem; color: #0f172a;">
-                ${{ item.subtotal|floatformat:"0" }}
+                ${{ item.subtotal|separador_miles }}
               </td>
 
               <td style="text-align: right;">
@@ -114,7 +114,7 @@
 
       <div class="summary-row total-row">
         <span>Total referencial:</span>
-        <span>${{ total_referencial|floatformat:"0" }}</span>
+        <span>${{ total_referencial|separador_miles }}</span>
       </div>
 
       <div style="font-size:0.75rem; color:#64748b; margin-top:-8px; margin-bottom:16px;">
