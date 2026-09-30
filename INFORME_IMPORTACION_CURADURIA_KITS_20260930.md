@@ -127,8 +127,7 @@ En cumplimiento del principio pedagógico Humm y la regla de no invención, se d
 
 * **Código Limpio:** Se eliminó la definición huérfana de `procesar_catalogo()` y se aseguró la compatibilidad dual con el formato maestro antiguo y la nueva lista comercial.
 * **Commit Git:**
-  * Hash anterior: `6e9d9e2`
-  * Nuevo commit de consolidación: `a3f5b2c` *(preparado para push)*
+  * Commit de consolidación: [`e326f85`](https://github.com/nativoaustral-bit/educompra/commit/e326f85) (enviado a `origin/main`)
 * **Estado en Producción:**
   * La plataforma pública en `https://educompra.humm.cl` responde `200 OK` en `/health/` y continúa sirviendo exactamente los **72 productos públicos originales**.
   * La plataforma administrativa `/gestion/` se encuentra operativa para autenticación de administradores.
