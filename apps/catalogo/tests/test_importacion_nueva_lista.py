@@ -236,3 +236,55 @@ class ImportacionNuevaListaTestCase(TestCase):
         self.assertEqual(Producto.objects.count(), prod_count_inicial)
         self.assertEqual(PrecioProveedorTramo.objects.count(), tramos_count_inicial)
 
+    def test_sincronizar_imagenes_banco(self):
+        import tempfile
+        from PIL import Image
+
+        prov = Proveedor.objects.create(codigo="TST", nombre="Test", moneda_origen="USD")
+        cat = Categoria.objects.create(nombre="Test Cat")
+        prod = Producto.objects.create(
+            proveedor=prov,
+            categoria=cat,
+            sku_humm="HUMM-TST-KS9999",
+            sku_proveedor="KS9999",
+            nombre_comercial="Producto Test",
+            nombre_original_proveedor="Product Test Original",
+            costo_proveedor_usd=Decimal("10.00"),
+            precio_sugerido_total_clp=Decimal("20000"),
+            publicado=False,
+            activo=True,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            img_path = Path(tmp_dir) / "KS9999.png"
+            img = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
+            img.save(img_path)
+
+            # 1. Primera sincronización -> vincula correctamente
+            reporte = ImportacionCatalogoService.sincronizar_imagenes_banco(
+                skus=["KS9999", "KS_NO_EXISTE"],
+                imagenes_dir=tmp_dir
+            )
+
+            self.assertEqual(len(reporte), 2)
+            rep_ks9999 = next(r for r in reporte if r["sku"] == "KS9999")
+            self.assertTrue(rep_ks9999["imagen_vinculada"])
+            self.assertEqual(rep_ks9999["estado"], "OK")
+            self.assertEqual(rep_ks9999["archivo_encontrado"], "KS9999.png")
+
+            # Verificar en BD
+            self.assertEqual(prod.imagenes.count(), 1)
+            img_obj = prod.imagenes.first()
+            self.assertTrue(img_obj.es_principal)
+            self.assertEqual(img_obj.nombre_archivo_original, "KS9999.png")
+
+            # 2. Segunda sincronización -> detecta ya vinculada sin duplicar
+            reporte2 = ImportacionCatalogoService.sincronizar_imagenes_banco(
+                skus=["KS9999"],
+                imagenes_dir=tmp_dir
+            )
+            self.assertFalse(reporte2[0]["imagen_vinculada"])
+            self.assertEqual(reporte2[0]["estado"], "YA_VINCULADA")
+            self.assertEqual(prod.imagenes.count(), 1)
+
+

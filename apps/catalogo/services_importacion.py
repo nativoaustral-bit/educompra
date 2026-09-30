@@ -231,6 +231,119 @@ class ImportacionCatalogoService:
         return tramos_resultado, tiene_anomalia, anomalias
 
     @classmethod
+    def sincronizar_imagenes_banco(cls, skus, imagenes_dir="data_import/imagenes"):
+        """
+        Escanea el banco físico de imágenes y vincula automáticamente cualquier fotografía
+        existente a los productos indicados por sku_proveedor.
+
+        Reglas:
+        - Admite extensiones: .jpg, .jpeg, .png, .webp
+        - No reemplaza ni duplica imágenes ya vinculadas correctamente
+        - Optimiza la imagen y la almacena en el media persistente (media/productos/)
+        - Crea ProductoImagen marcando es_principal=True
+        - NO modifica: costos, precios, tramos, nombres, categorías, curaduría,
+          especificación neutral ni estado de publicación (mantiene publicado=False)
+        - Retorna reporte detallado por SKU
+        """
+        imagenes_p = Path(imagenes_dir) if imagenes_dir else Path("data_import/imagenes")
+        if not imagenes_p.exists() or not imagenes_p.is_dir():
+            raise ValidationError(f"El directorio de imágenes {imagenes_dir} no existe.")
+
+        # Indizar banco físico de imágenes
+        banco_imagenes = defaultdict(list)
+        for img_file in imagenes_p.iterdir():
+            if img_file.is_file() and img_file.suffix.lower() in cls.EXTENSIONES_IMAGEN_VALIDAS:
+                stem = img_file.stem.upper().strip()
+                if img_file not in banco_imagenes[stem]:
+                    banco_imagenes[stem].append(img_file)
+                tokens = [t.strip() for t in re.split(r"[\s]+|-(?=[A-Za-z0-9]{4,})", stem) if t.strip()]
+                for tok in tokens:
+                    if img_file not in banco_imagenes[tok]:
+                        banco_imagenes[tok].append(img_file)
+
+        media_productos_dir = Path(settings.MEDIA_ROOT) / "productos"
+        media_productos_dir.mkdir(parents=True, exist_ok=True)
+        media_catalogo_dir = Path(settings.MEDIA_ROOT) / "catalogo" / "originales"
+        media_catalogo_dir.mkdir(parents=True, exist_ok=True)
+
+        reporte = []
+
+        for sku in skus:
+            sku_clean = str(sku).strip().upper()
+            prod = (
+                Producto.objects.filter(sku_proveedor__iexact=sku_clean).first()
+                or Producto.objects.filter(sku_humm__iexact=sku_clean).first()
+            )
+
+            if not prod:
+                reporte.append({
+                    "sku": sku_clean,
+                    "archivo_encontrado": "N/A (Producto no existe en BD)",
+                    "imagen_vinculada": False,
+                    "estado": "ERROR_PRODUCTO_NO_ENCONTRADO",
+                })
+                continue
+
+            # Si ya tiene imagen, no reemplazar ni duplicar
+            if prod.imagenes.exists():
+                img_actual = prod.imagenes.first()
+                reporte.append({
+                    "sku": sku_clean,
+                    "archivo_encontrado": img_actual.nombre_archivo_original or Path(img_actual.archivo.name).name,
+                    "imagen_vinculada": False,
+                    "estado": "YA_VINCULADA",
+                })
+                continue
+
+            # Buscar archivos en banco físico
+            archivos_img = banco_imagenes.get(sku_clean, [])
+            if not archivos_img:
+                for ext in cls.EXTENSIONES_IMAGEN_VALIDAS:
+                    cand = imagenes_p / f"{sku_clean}{ext}"
+                    if cand.exists() and cand.is_file():
+                        archivos_img.append(cand)
+                        break
+
+            if not archivos_img:
+                reporte.append({
+                    "sku": sku_clean,
+                    "archivo_encontrado": "Ninguno",
+                    "imagen_vinculada": False,
+                    "estado": "SIN_IMAGEN",
+                })
+                continue
+
+            # Imagen encontrada -> procesar y vincular
+            img_src = archivos_img[0]
+            ext = img_src.suffix.lower()
+            dest_filename = f"{prod.sku_proveedor}_01{ext}"
+            dest_path_prod = media_productos_dir / dest_filename
+            dest_path_cat = media_catalogo_dir / img_src.name
+
+            # Optimizar y copiar al media persistente
+            optimizar_imagen(img_src, dest_path_prod)
+            optimizar_imagen(img_src, dest_path_cat)
+
+            # Crear ProductoImagen
+            rel_media_path = f"productos/{dest_filename}"
+            ProductoImagen.objects.create(
+                producto=prod,
+                archivo=rel_media_path,
+                nombre_archivo_original=img_src.name,
+                es_principal=True,
+                orden=0,
+            )
+
+            reporte.append({
+                "sku": sku_clean,
+                "archivo_encontrado": img_src.name,
+                "imagen_vinculada": True,
+                "estado": "OK",
+            })
+
+        return reporte
+
+    @classmethod
     def procesar_catalogo(cls, excel_path, imagenes_dir=None, is_dry_run=True,
                           actualizar_costos=True, limite=0, usuario=None, lote=None, request=None,
                           skus_filtro=None):
