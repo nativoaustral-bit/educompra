@@ -42,21 +42,22 @@ En estricto cumplimiento de la autorización de Humm y del principio de calidad 
 
 | Métrica | Antes de Publicar | Después de Publicar | Variación (Delta) | Observación |
 | :--- | :---: | :---: | :---: | :--- |
-| **Productos Públicos en Tienda** | **72** | **76** | **+4** | 4 productos aprobados formalmente |
+| **Productos Públicos en Tienda** | **72** | **77** | **+5** | 5 kits aprobados formalmente (+4 Lote 1, +1 KS0540) |
 | **Productos en Catálogo Maestro** | 939 | 939 | 0 | Sin alteraciones de inventario |
-| **Productos con Imagen Real** | 78 | **82** | +4 | 4 nuevas fotos vinculadas en `/media/productos/` |
-| **Kits de esta Lista Publicados** | 0 | **4** | +4 | Lote 1 completamente publicado |
+| **Productos con Imagen Real** | 78 | **82** | +4 | 4 nuevas fotos vinculadas en `/media/productos/` (+ KS0540 previa) |
+| **Kits de esta Lista Publicados** | 0 | **5** | +5 | Lote 1 completamente publicado + KS0540 |
 | **Kits de esta Lista Pendientes de Foto** | 6 | **6** | 0 | Lote 2 resguardado hasta recibir fotografías |
 
 ---
 
-## 4. Verificación de `KS0540` (Caso Prioritario)
+## 4. Publicación Autorizada de `KS0540` (Kit Arduino con Placa)
 
 * **SKU:** `KS0540` (ID 584)
 * **Nombre Comercial:** Kit Inicial Arduino con Placa Controladora — 20 Proyectos Guiados
-* **Evaluación del Gate:** **APROBADO** (Cumple los 8 criterios: activo, curaduría validada, categoría válida, descripción pedagógica, imagen `/media/productos/KS0540_01.jpg`, precio referencial positivo, unidad de compra).
-* **Estado de Publicación:** **`publicado = False`** *(Preservado sin cambios)*.
-* **Motivo:** En estricta conformidad con la instrucción de Humm, no se publicó por requerir autorización explícita e independiente.
+* **Evaluación del Gate:** **APROBADO** (Cumple los 8 criterios: activo, curaduría validada, categoría válida, descripción pedagógica, imagen `/media/productos/KS0540_01.jpg`, precio referencial positivo de $32.762 CLP IVA inc., unidad de compra).
+* **Estado de Publicación:** **`publicado = True`** *(Publicado exitosamente vía `ProductoPublicationService`)*.
+* **URL Pública:** [`/catalogo/ks0540-keyestudio-basic-starter-kit-for-arduino-diy-programming-electronics-kit-20project-with-plus-mainboard-keyestudio-basic-starter-kit-for-ar/`](https://educompra.humm.cl/catalogo/ks0540-keyestudio-basic-starter-kit-for-arduino-diy-programming-electronics-kit-20project-with-plus-mainboard-keyestudio-basic-starter-kit-for-ar/)
+* **Complementariedad Escolar:** Complementa en catálogo al SKU `KS0541` (Kit de componentes Arduino *Sin Placa Controladora*). Ambos ofrecen ahora la opción pedagógica completa para colegios con y sin placas disponibles.
 
 ---
 
