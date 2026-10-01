@@ -22,10 +22,23 @@ class Command(BaseCommand):
             action="store_true",
             help="Valida que la base contenga exactamente 939 productos, 76 publicados y 88 validados.",
         )
+        parser.add_argument(
+            "--assert-77",
+            action="store_true",
+            help="Valida que la base contenga exactamente 939 productos, 77 publicados y 88 validados.",
+        )
+        parser.add_argument(
+            "--assert-publicados",
+            type=int,
+            default=None,
+            help="Valida que la cantidad de productos publicados coincida con el número dado.",
+        )
 
     def handle(self, *args, **options):
         assert_72 = options.get("assert_72", False)
         assert_76 = options.get("assert_76", False)
+        assert_77 = options.get("assert_77", False)
+        assert_publicados = options.get("assert_publicados", None)
 
         self.stdout.write("=" * 70)
         self.stdout.write("EDUCOMPRA HUMM — ESTADO DE BASE DE DATOS Y CATÁLOGO")
@@ -85,3 +98,28 @@ class Command(BaseCommand):
                 raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos.")
 
             self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 76 productos curados y publicados (939 total, 88 validados)."))
+
+        elif assert_77:
+            errores = []
+            if total != 939:
+                errores.append(f"Total productos esperado 939, detectado {total}")
+            if validados != 88:
+                errores.append(f"Productos en estado VALIDADO esperado 88, detectado {validados}")
+            if publicados != 77:
+                errores.append(f"Productos publicados esperado 77, detectado {publicados}")
+            if no_publicados != 862:
+                errores.append(f"Productos no publicados esperado 862, detectado {no_publicados}")
+            if validados_humm != 0:
+                errores.append(f"Especificaciones VALIDADO_HUMM esperado 0, detectado {validados_humm}")
+
+            if errores:
+                for err in errores:
+                    self.stdout.write(self.style.ERROR(f"❌ {err}"))
+                raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos.")
+
+            self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 77 productos curados y publicados (939 total, 88 validados)."))
+
+        if assert_publicados is not None:
+            if publicados != assert_publicados:
+                raise CommandError(f"Productos publicados esperado {assert_publicados}, detectado {publicados}")
+            self.stdout.write(self.style.SUCCESS(f"✔ AUDITORÍA EXITOSA: Exactamente {assert_publicados} productos publicados."))
