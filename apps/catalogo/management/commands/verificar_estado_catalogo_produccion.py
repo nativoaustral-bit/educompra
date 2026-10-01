@@ -28,6 +28,11 @@ class Command(BaseCommand):
             help="Valida que la base contenga exactamente 939 productos, 77 publicados y 88 validados.",
         )
         parser.add_argument(
+            "--assert-960",
+            action="store_true",
+            help="Valida que la base contenga exactamente 960 productos en el catálogo maestro y 77 publicados.",
+        )
+        parser.add_argument(
             "--assert-publicados",
             type=int,
             default=None,
@@ -38,6 +43,7 @@ class Command(BaseCommand):
         assert_72 = options.get("assert_72", False)
         assert_76 = options.get("assert_76", False)
         assert_77 = options.get("assert_77", False)
+        assert_960 = options.get("assert_960", False)
         assert_publicados = options.get("assert_publicados", None)
 
         self.stdout.write("=" * 70)
@@ -118,6 +124,21 @@ class Command(BaseCommand):
                 raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos.")
 
             self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 77 productos curados y publicados (939 total, 88 validados)."))
+
+        elif assert_960:
+            errores = []
+            if total != 960:
+                errores.append(f"Total productos en catálogo maestro esperado 960, detectado {total}")
+            if publicados != 77:
+                errores.append(f"Productos publicados en catálogo abierto esperado 77, detectado {publicados}")
+            if no_publicados != 883:
+                errores.append(f"Productos no publicados esperado 883, detectado {no_publicados}")
+            if errores:
+                for err in errores:
+                    self.stdout.write(self.style.ERROR(f"❌ {err}"))
+                raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos de consolidación 960 SKU.")
+
+            self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 960 productos en catálogo maestro y 77 publicados."))
 
         if assert_publicados is not None:
             if publicados != assert_publicados:

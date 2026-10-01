@@ -96,17 +96,18 @@ A partir de la incorporación de listas de proveedor con tramos por volumen y la
 
 | Métrica | Valor Actual | Estado |
 | :--- | :---: | :--- |
-| **Productos en Catálogo Maestro** | **939** | Inventario consolidado de componentes y kits |
+| **Productos en Catálogo Maestro** | **960** | Inventario consolidado único Keyestudio (Fase 5A) |
 | **Curaduría Pedagógica 'VALIDADO'** | **88** | Fichas técnicas con curaduría y uso educativo formal |
-| **Productos Públicos en Tienda** | **77** | Expuestos en [educompra.humm.cl/catalogo/](https://educompra.humm.cl/catalogo/) |
-| **Productos en Resguardo (No Públicos)** | **862** | Preservados en base de datos (`publicado=False`) |
+| **Productos Públicos en Tienda** | **77** | Expuestos en [educompra.humm.cl/catalogo/](https://educompra.humm.cl/catalogo/) (Inalterado) |
+| **Productos en Resguardo (No Públicos)** | **883** | Preservados en catálogo maestro (`publicado=False`) |
+| **Productos en Cuarentena** | **2** | `KS0240` y `60720227` pendientes de resolución proveedor |
 | **Kits Educativos Publicados** | **9** | Arduino (con y sin placa), micro:bit, ESP32, IoT, Didácticos |
 | **Kits en Espera de Fotografía** | **6** | Lote 2 resguardado por gate de calidad (`SIN_IMAGEN`) |
 
 ### Fórmulas de Pricing Institucional:
 * **Costo Puesto en Chile:** $\text{USD} \times \text{TC} \times (1 + \text{Arancel} + \text{Internación})$
 * **Precio Sugerido Total:** $\text{Costo Chile} \times (1 + \text{Margen}) \times 1.19$ (IVA incluido).
-* **Escalas por Volumen:** Registro de tramos diferenciados (1–9, 10–49, 50–100, 101–300+ unidades).
+* **Escalas por Volumen:** Registro de tramos diferenciados (1–9, 10–49, 50–100, 101–300+ unidades) en 150 productos.
 
 ---
 
@@ -130,7 +131,10 @@ Para operaciones administrativas en servidor o desarrollo local:
 
 ### Auditoría y Verificación de Estado
 ```bash
-# Verifica que el catálogo productivo contenga exactamente 77 productos publicados
+# Verifica que el catálogo contenga exactamente 960 productos en maestro y 77 publicados
+python manage.py verificar_estado_catalogo_produccion --assert-960
+
+# Verificación de compatibilidad anterior
 python manage.py verificar_estado_catalogo_produccion --assert-77
 
 # Verificación configurable por cantidad arbitraria
@@ -138,6 +142,15 @@ python manage.py verificar_estado_catalogo_produccion --assert-publicados 77
 
 # Inspección informativa general sin abortar
 python manage.py verificar_estado_catalogo_produccion
+```
+
+### Consolidación de Catálogo Maestro 960 SKU
+```bash
+# Simulación previa obligatoria sin escrituras
+python manage.py consolidar_catalogo_maestro_960 --dry-run
+
+# Aplicación atómica en base de datos
+python manage.py consolidar_catalogo_maestro_960 --aplicar
 ```
 
 ### Configuración de Roles y Permisos de Gestión

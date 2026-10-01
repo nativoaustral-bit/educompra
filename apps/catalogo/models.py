@@ -336,6 +336,12 @@ class Producto(models.Model):
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
         ordering = ["-destacado", "nombre_comercial"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["proveedor", "sku_proveedor"],
+                name="unique_proveedor_sku_proveedor"
+            )
+        ]
 
     def __str__(self):
         return f"{self.nombre_comercial} [{self.sku_humm}]"
