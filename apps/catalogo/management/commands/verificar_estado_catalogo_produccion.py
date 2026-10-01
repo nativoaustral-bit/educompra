@@ -17,9 +17,15 @@ class Command(BaseCommand):
             action="store_true",
             help="Valida que la base contenga exactamente 929 productos, 72 publicados y 72 validados.",
         )
+        parser.add_argument(
+            "--assert-76",
+            action="store_true",
+            help="Valida que la base contenga exactamente 939 productos, 76 publicados y 88 validados.",
+        )
 
     def handle(self, *args, **options):
         assert_72 = options.get("assert_72", False)
+        assert_76 = options.get("assert_76", False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("EDUCOMPRA HUMM — ESTADO DE BASE DE DATOS Y CATÁLOGO")
@@ -59,3 +65,23 @@ class Command(BaseCommand):
                 raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos.")
 
             self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 72 productos curados y publicados."))
+
+        elif assert_76:
+            errores = []
+            if total != 939:
+                errores.append(f"Total productos esperado 939, detectado {total}")
+            if validados != 88:
+                errores.append(f"Productos en estado VALIDADO esperado 88, detectado {validados}")
+            if publicados != 76:
+                errores.append(f"Productos publicados esperado 76, detectado {publicados}")
+            if no_publicados != 863:
+                errores.append(f"Productos no publicados esperado 863, detectado {no_publicados}")
+            if validados_humm != 0:
+                errores.append(f"Especificaciones VALIDADO_HUMM esperado 0, detectado {validados_humm}")
+
+            if errores:
+                for err in errores:
+                    self.stdout.write(self.style.ERROR(f"❌ {err}"))
+                raise CommandError("La auditoría de estado del catálogo productivo no cumplió los requisitos.")
+
+            self.stdout.write(self.style.SUCCESS("✔ AUDITORÍA EXITOSA: Exactamente 76 productos curados y publicados (939 total, 88 validados)."))

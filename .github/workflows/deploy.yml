@@ -126,7 +126,7 @@ jobs:
           echo "Estado actual de productos publicados en base de datos: $PUB_ACTUAL"
           "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion
 
-          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-72}"
+          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-76}"
           echo "Verificando contra estado esperado configurado ($EXPECTED_PUB productos publicados)..."
           if [ "$PUB_ACTUAL" -ne "$EXPECTED_PUB" ]; then
               echo "❌ ERROR: Cantidad de productos publicados ($PUB_ACTUAL) no coincide con el estado esperado configurado ($EXPECTED_PUB)." >&2
@@ -229,7 +229,7 @@ jobs:
           fi
           echo "✔ Mensaje de validación no presente en catálogo público."
 
-          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-72}"
+          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-76}"
           if ! echo "$CATALOGO_RESP" | grep -q "$EXPECTED_PUB"; then
             echo "❌ Error: No se encontró la referencia a $EXPECTED_PUB productos en la respuesta del catálogo." >&2
             exit 1
@@ -239,7 +239,9 @@ jobs:
           # Verificación no destructiva en el servidor: confirmar que exactamente los productos esperados están publicados
           echo "Ejecutando auditoría de estado del catálogo en HostGator (verificación no destructiva)..."
           MAX_RETRIES=4
-          if [ "$EXPECTED_PUB" = "72" ]; then
+          if [ "$EXPECTED_PUB" = "76" ]; then
+            REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion --assert-76"
+          elif [ "$EXPECTED_PUB" = "72" ]; then
             REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion --assert-72"
           else
             REMOTE_CMD="set -a; [ -f /home1/paulocis/apps/educompra/secrets/.env ] && . /home1/paulocis/apps/educompra/secrets/.env; export DB_NAME=/home1/paulocis/apps/educompra/data/db.sqlite3; set +a; cd /home1/paulocis/apps/educompra/app && /home1/paulocis/apps/educompra/venv/bin/python manage.py verificar_estado_catalogo_produccion"
@@ -247,7 +249,7 @@ jobs:
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Intento $i de auditoría remota..."
             if ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "$REMOTE_CMD"; then
-              echo "✔ Auditoría remota de catálogo verificada exitosamente (72 productos públicos)."
+              echo "✔ Auditoría remota de catálogo verificada exitosamente ($EXPECTED_PUB productos públicos)."
               break
             else
               echo "Fallo de conexión o auditoría en intento $i. Reintentando en 6s..."
