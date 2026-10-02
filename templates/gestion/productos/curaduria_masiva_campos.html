@@ -1,0 +1,172 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Asignar Campos Comunes en Masa — Administración EduCompra{% endblock %}
+{% block page_title %}Asignación Masiva de Campos Comunes{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Candidatos
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Explicación de Seguridad -->
+  <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+    <h3 style="margin: 0 0 0.3rem 0; font-size: 0.95rem; color: #1e40af; display: flex; align-items: center; gap: 0.5rem;">
+      <span>🏷️</span> Asignación Segura de Metadatos Comunes ({{ productos|length }} productos)
+    </h3>
+    <p style="margin: 0; font-size: 0.85rem; color: #1e3a8a; line-height: 1.4;">
+      Esta herramienta permite actualizar parámetros organizacionales comunes (categoría, stock, días de despacho, nivel educativo).
+      <strong>Por diseño de seguridad, NO modifica los textos descriptivos pedagógicos ni nombres comerciales diferenciales</strong>.
+    </p>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <h3 class="admin-card-title">Seleccionar Campos a Aplicar</h3>
+      <span style="font-size: 0.8rem; color: var(--admin-text-muted);">Marque la casilla de cada campo que desee sobrescribir</span>
+    </div>
+
+    <form method="post" action="{% url 'gestion:productos_curaduria_masiva_campos' %}?ids={{ ids_param }}" style="padding: 1.5rem;">
+      {% csrf_token %}
+      <input type="hidden" name="ids" value="{{ ids_param }}">
+      <input type="hidden" name="accion" value="aplicar_campos_comunes">
+
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+
+        <!-- Categoría -->
+        <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+            <input type="checkbox" name="aplicar_categoria" value="1" id="chk-cat" onchange="toggleField('chk-cat', 'field-cat');">
+            <span>Aplicar Categoría Común</span>
+          </label>
+          <div id="field-cat" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem;">
+            <select name="categoria" class="admin-select" style="width: 320px;">
+              <option value="">Seleccionar categoría...</option>
+              {% for cat in categorias %}
+                <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Nivel de Dificultad -->
+        <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+            <input type="checkbox" name="aplicar_dificultad" value="1" id="chk-dif" onchange="toggleField('chk-dif', 'field-dif');">
+            <span>Aplicar Nivel de Dificultad</span>
+          </label>
+          <div id="field-dif" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem;">
+            <select name="nivel_dificultad" class="admin-select" style="width: 320px;">
+              {% for cod, label in dificultad_choices %}
+                <option value="{{ cod }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Estado de Stock y Días de Entrega -->
+        <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <input type="checkbox" name="aplicar_stock" value="1" id="chk-stock" onchange="toggleField('chk-stock', 'field-stock');">
+                <span>Aplicar Disponibilidad</span>
+              </label>
+              <div id="field-stock" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem;">
+                <select name="estado_stock" class="admin-select" style="width: 100%;">
+                  {% for cod, label in stock_choices %}
+                    <option value="{{ cod }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <input type="checkbox" name="aplicar_dias" value="1" id="chk-dias" onchange="toggleField('chk-dias', 'field-dias');">
+                <span>Días de Entrega Estimados</span>
+              </label>
+              <div id="field-dias" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem;">
+                <input type="number" name="dias_entrega_estimados" value="5" min="1" max="60" class="admin-input" style="width: 120px;">
+                <span style="font-size: 0.8rem; color: var(--admin-text-muted);">días hábiles</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Unidad de Compra -->
+        <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+            <input type="checkbox" name="aplicar_unidad" value="1" id="chk-uni" onchange="toggleField('chk-uni', 'field-uni');">
+            <span>Aplicar Unidad de Compra</span>
+          </label>
+          <div id="field-uni" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem;">
+            <input type="text" name="unidad_compra" value="unidad" class="admin-input" style="width: 220px;" placeholder="unidad, set, kit, pack">
+          </div>
+        </div>
+
+        <!-- Tecnologías Compatibles -->
+        <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 0.5rem;">
+            <input type="checkbox" name="aplicar_tecnologias" value="1" id="chk-tech" onchange="toggleField('chk-tech', 'field-tech');">
+            <span>Asignar Tecnologías Compatibles</span>
+          </label>
+          <div id="field-tech" style="opacity: 0.5; pointer-events: none; margin-left: 1.5rem; display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem;">
+            {% for tech in tecnologias %}
+              <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; background: #fff; padding: 0.25rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); cursor: pointer;">
+                <input type="checkbox" name="tecnologias_compatibles" value="{{ tech.id }}">
+                <span>{{ tech.nombre }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Productos Afectados -->
+      <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--admin-card-border);">
+        <div style="font-weight: 700; font-size: 0.85rem; color: #475569; margin-bottom: 0.5rem;">
+          Productos seleccionados que recibirán estos metadatos ({{ productos|length }}):
+        </div>
+        <div style="max-height: 120px; overflow-y: auto; background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.78rem; font-family: monospace;">
+          {% for p in productos %}
+            <span style="display: inline-block; background: #e2e8f0; padding: 0.1rem 0.4rem; border-radius: 4px; margin: 0.15rem;">
+              {{ p.sku_humm }} ({{ p.nombre_comercial|truncatechars:25 }})
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
+        <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-secondary">Cancelar</a>
+        <button type="submit" class="btn-admin btn-admin-primary" style="background-color: #4338ca;" onclick="return confirm('¿Aplicar los campos marcados a los {{ productos|length }} productos?');">
+          🏷️ Aplicar Metadatos a los {{ productos|length }} Productos
+        </button>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function toggleField(chkId, fieldId) {
+    const chk = document.getElementById(chkId);
+    const field = document.getElementById(fieldId);
+    if (chk && field) {
+      if (chk.checked) {
+        field.style.opacity = '1';
+        field.style.pointerEvents = 'auto';
+      } else {
+        field.style.opacity = '0.5';
+        field.style.pointerEvents = 'none';
+      }
+    }
+  }
+</script>
+{% endblock %}

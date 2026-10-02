@@ -32,9 +32,19 @@
         </li>
 
         <li class="sidebar-section-title">Catálogo</li>
-        <li class="sidebar-item {% if 'productos' in request.resolver_match.url_name %}active{% endif %}">
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'productos_lista' %}active{% endif %}">
           <a href="{% url 'gestion:productos_lista' %}">
-            <span>📦 Productos</span>
+            <span>📦 Catálogo Maestro</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'productos_seleccion_sku' %}active{% endif %}">
+          <a href="{% url 'gestion:productos_seleccion_sku' %}">
+            <span>📋 Selección por SKU</span>
+          </a>
+        </li>
+        <li class="sidebar-item {% if request.resolver_match.url_name == 'productos_candidatos' or 'curaduria' in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'gestion:productos_candidatos' %}">
+            <span>🎯 Curaduría / Candidatos</span>
           </a>
         </li>
         <li class="sidebar-item {% if 'importaciones' in request.resolver_match.url_name %}active{% endif %}">
@@ -83,9 +93,9 @@
         </li>
 
         <li class="sidebar-section-title">Sistema</li>
-        <li class="sidebar-item {% if request.resolver_match.url_name == 'configuracion' %}active{% endif %}">
-          <a href="{% url 'gestion:configuracion' %}">
-            <span>⚙️ Configuración & Pricing</span>
+        <li class="sidebar-item {% if request.resolver_match.url_name in 'configuracion precios_dashboard' %}active{% endif %}">
+          <a href="{% url 'gestion:precios_dashboard' %}">
+            <span>💰 Pricing & Simulador</span>
           </a>
         </li>
         <li class="sidebar-item">

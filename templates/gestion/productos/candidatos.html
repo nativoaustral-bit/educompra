@@ -1,0 +1,211 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Bandeja de Curaduría y Candidatos — Administración EduCompra{% endblock %}
+{% block page_title %}Bandeja de Curaduría Pedagógica y Candidatos{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_seleccion_sku' %}" class="btn-admin btn-admin-primary" style="background-color: #4338ca;">
+    📋 Incorporar Más SKU
+  </a>
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo Maestro
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Resumen de Bandeja -->
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; color: #166534; display: flex; align-items: center; gap: 0.5rem;">
+        <span>🎯</span> Cola Activa de Curaduría Pedagógica
+      </h3>
+      <p style="margin: 0; font-size: 0.85rem; color: #15803d;">
+        Productos priorizados para su evaluación pedagógica y preparación antes de su publicación en el catálogo escolar.
+      </p>
+    </div>
+    <div style="font-size: 1.1rem; font-weight: 800; color: #166534;">
+      {{ total_candidatos }} en cola
+    </div>
+  </div>
+
+  <!-- Filtro de Búsqueda -->
+  <form method="get" class="admin-filters-bar" style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; align-items: flex-end; background: #fff; padding: 0.85rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--admin-card-border);">
+    <div style="flex: 1 1 250px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar en candidatos</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Buscar por SKU o nombre..." class="admin-input" style="width: 100%;">
+    </div>
+
+    <div style="flex: 0 1 180px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Estado de curaduría</label>
+      <select name="estado" class="admin-select" style="width: 100%;">
+        <option value="">Todos (Candidato + En curaduría)</option>
+        <option value="CANDIDATO" {% if estado_activo == 'CANDIDATO' %}selected{% endif %}>Solo Candidatos</option>
+        <option value="EN_CURADURIA" {% if estado_activo == 'EN_CURADURIA' %}selected{% endif %}>En Proceso de Curaduría</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.4rem;">
+      <button type="submit" class="btn-admin btn-admin-primary">Filtrar</button>
+      <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-secondary">Limpiar</a>
+    </div>
+  </form>
+
+  <!-- Tabla de Candidatos con Selección -->
+  <div class="admin-table-container">
+    <table class="admin-table" style="font-size: 0.84rem;">
+      <thead>
+        <tr>
+          <th style="width: 36px; text-align: center;">
+            <input type="checkbox" id="check-all" title="Seleccionar todos los candidatos">
+          </th>
+          <th style="width: 50px;">Foto</th>
+          <th style="width: 140px;">SKU Humm / Prov</th>
+          <th>Nombre Comercial / Original</th>
+          <th>Categoría</th>
+          <th style="text-align: right;">Costo USD</th>
+          <th style="text-align: right;">Precio Ref. CLP</th>
+          <th style="text-align: center;">Estado Curaduría</th>
+          <th style="text-align: right;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for prod in productos %}
+          <tr>
+            <td style="text-align: center;">
+              <input type="checkbox" name="selected_candidatos" value="{{ prod.id }}" class="candidato-cb">
+            </td>
+            <td>
+              <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" style="width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid var(--admin-card-border);">
+            </td>
+            <td>
+              <strong style="color: var(--admin-primary); font-family: monospace; font-size: 0.82rem;">{{ prod.sku_humm }}</strong>
+              <div style="font-size: 0.72rem; color: var(--admin-text-muted); font-family: monospace;">Prov: {{ prod.sku_proveedor }}</div>
+            </td>
+            <td>
+              <a href="{% url 'gestion:producto_detalle' prod.id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
+                {{ prod.nombre_comercial }}
+              </a>
+              {% if prod.nombre_original_proveedor and prod.nombre_original_proveedor != prod.nombre_comercial %}
+                <div style="font-size: 0.72rem; color: #64748b; font-style: italic;">
+                  Orig: {{ prod.nombre_original_proveedor }}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              <span style="font-size: 0.8rem;">{{ prod.categoria.nombre|default:"Sin categoría" }}</span>
+            </td>
+            <td style="text-align: right; font-family: monospace;">
+              ${{ prod.costo_proveedor_usd|default:"0.00" }}
+            </td>
+            <td style="text-align: right;">
+              <strong>${{ prod.precio_sugerido_total_clp|stringformat:",d" }}</strong>
+            </td>
+            <td style="text-align: center;">
+              {% if prod.estado_curaduria == 'CANDIDATO' %}
+                <span class="admin-badge" style="background: #dbeafe; color: #1e40af;">Candidato</span>
+              {% elif prod.estado_curaduria == 'EN_CURADURIA' %}
+                <span class="admin-badge badge-amarillo">En Curaduría</span>
+              {% else %}
+                <span class="admin-badge badge-gris">{{ prod.get_estado_curaduria_display }}</span>
+              {% endif %}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="{% url 'gestion:productos_curaduria_lote' %}?ids={{ prod.id }}" class="btn-admin btn-admin-primary" style="padding: 0.25rem 0.55rem; font-size: 0.78rem; background-color: #0284c7;">
+                ✏️ Curar
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+              No hay productos candidatos en la cola de curaduría actualmente.
+              <div style="margin-top: 0.75rem;">
+                <a href="{% url 'gestion:productos_seleccion_sku' %}" class="btn-admin btn-admin-primary" style="background-color: #4338ca;">
+                  📋 Seleccionar productos mediante lista de SKU
+                </a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Barra Flotante de Selección -->
+  <div id="candidatos-toolbar" class="batch-toolbar" style="display: none;">
+    <div>
+      <span class="batch-toolbar-count" id="candidatos-counter">0</span> productos candidatos seleccionados
+    </div>
+    <div class="batch-toolbar-actions">
+      <button type="button" class="btn-admin btn-admin-primary" style="background-color: #0284c7; font-size: 0.82rem;" onclick="irACurarLote();">
+        ✏️ Curar Seleccionados en Lote
+      </button>
+
+      <button type="button" class="btn-admin btn-admin-primary" style="background-color: #4338ca; font-size: 0.82rem;" onclick="irACamposComunes();">
+        🏷️ Asignar Campos Comunes en Masa
+      </button>
+
+      <button type="button" class="btn-admin btn-admin-secondary" style="font-size: 0.82rem;" onclick="limpiarCandidatosSeleccion();">
+        ✕ Cancelar
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const checkAll = document.getElementById('check-all');
+  const checkboxes = document.querySelectorAll('.candidato-cb');
+  const toolbar = document.getElementById('candidatos-toolbar');
+  const counter = document.getElementById('candidatos-counter');
+
+  function updateToolbar() {
+    const checked = Array.from(checkboxes).filter(cb => cb.checked);
+    if (checked.length > 0) {
+      toolbar.style.display = 'flex';
+      counter.textContent = checked.length;
+    } else {
+      toolbar.style.display = 'none';
+      if (checkAll) checkAll.checked = false;
+    }
+  }
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function() {
+      checkboxes.forEach(cb => { cb.checked = checkAll.checked; });
+      updateToolbar();
+    });
+  }
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', updateToolbar);
+  });
+
+  function limpiarCandidatosSeleccion() {
+    checkboxes.forEach(cb => { cb.checked = false; });
+    if (checkAll) checkAll.checked = false;
+    updateToolbar();
+  }
+
+  function getSelectedIds() {
+    return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+  }
+
+  function irACurarLote() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) { alert('Seleccione al menos un producto.'); return; }
+    window.location.href = "{% url 'gestion:productos_curaduria_lote' %}?ids=" + ids.join(',');
+  }
+
+  function irACamposComunes() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) { alert('Seleccione al menos un producto.'); return; }
+    window.location.href = "{% url 'gestion:productos_curaduria_masiva_campos' %}?ids=" + ids.join(',');
+  }
+</script>
+{% endblock %}

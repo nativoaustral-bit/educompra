@@ -1,0 +1,192 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Publicación Masiva de Productos — Administración EduCompra{% endblock %}
+{% block page_title %}Evaluación y Publicación en Lote{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Resumen de Evaluación -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+    <div class="kpi-card" style="padding: 1rem;">
+      <div class="kpi-title">Evaluados</div>
+      <div class="kpi-value">{{ total_evaluados }}</div>
+      <div class="kpi-footer">Total lote analizado</div>
+    </div>
+
+    <div class="kpi-card" style="padding: 1rem; border-left: 3px solid #059669;">
+      <div class="kpi-title" style="color: #059669;">Listos para Publicar</div>
+      <div class="kpi-value" style="color: #059669;">{{ total_listos }}</div>
+      <div class="kpi-footer">Cumplen los 8 requisitos Humm</div>
+    </div>
+
+    <div class="kpi-card" style="padding: 1rem; border-left: 3px solid #dc2626;">
+      <div class="kpi-title" style="color: #dc2626;">Bloqueados</div>
+      <div class="kpi-value" style="color: #dc2626;">{{ total_bloqueados }}</div>
+      <div class="kpi-footer">Tienen requisitos pendientes</div>
+    </div>
+
+    <div class="kpi-card" style="padding: 1rem; border-left: 3px solid #64748b;">
+      <div class="kpi-title">Ya Publicados</div>
+      <div class="kpi-value">{{ total_ya_publicados }}</div>
+      <div class="kpi-footer">Actualmente visibles</div>
+    </div>
+  </div>
+
+  <!-- Botón de Confirmación para los Listos -->
+  {% if total_listos > 0 %}
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h3 style="margin: 0 0 0.25rem 0; font-size: 1rem; color: #166534;">
+          ✓ {{ total_listos }} producto(s) listo(s) para publicarse en EduCompra
+        </h3>
+        <p style="margin: 0; font-size: 0.85rem; color: #15803d;">
+          Pasarán a ser visibles para los colegios en el catálogo público y cotizador web. Los {{ total_bloqueados }} bloqueados permanecerán en borrador.
+        </p>
+      </div>
+
+      <form method="post" action="{% url 'gestion:productos_publicacion_lote' %}?ids={{ ids_param }}">
+        {% csrf_token %}
+        <input type="hidden" name="ids" value="{{ ids_param }}">
+        <button type="submit" name="accion" value="confirmar_publicacion" class="btn-admin btn-admin-primary" style="background-color: #16a34a; font-size: 0.95rem; padding: 0.65rem 1.5rem;" onclick="return confirm('¿Confirmar la publicación inmediata de los {{ total_listos }} productos listos?');">
+          🌐 Publicar {{ total_listos }} Productos Listos
+        </button>
+      </form>
+    </div>
+  {% endif %}
+
+  <!-- Sección de Productos Listos -->
+  {% if listos %}
+    <div class="admin-card" style="margin-bottom: 1.5rem;">
+      <div class="admin-card-header" style="background-color: #f8fafc;">
+        <h3 class="admin-card-title" style="color: #166534;">
+          ✓ Productos Aprobados para Publicación ({{ listos|length }})
+        </h3>
+      </div>
+      <div class="table-responsive">
+        <table class="admin-table" style="font-size: 0.84rem;">
+          <thead>
+            <tr>
+              <th style="width: 50px;">Foto</th>
+              <th style="width: 140px;">SKU Humm / Prov</th>
+              <th>Nombre Comercial</th>
+              <th>Categoría</th>
+              <th style="text-align: right;">Precio Ref. CLP</th>
+              <th style="text-align: center;">Curaduría</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for prod in listos %}
+              <tr>
+                <td>
+                  <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" style="width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid var(--admin-card-border);">
+                </td>
+                <td>
+                  <strong style="color: var(--admin-primary); font-family: monospace;">{{ prod.sku_humm }}</strong>
+                  <div style="font-size: 0.72rem; color: var(--admin-text-muted); font-family: monospace;">{{ prod.sku_proveedor }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'gestion:producto_detalle' prod.id %}" target="_blank" style="text-decoration: none; color: inherit; font-weight: 600;">
+                    {{ prod.nombre_comercial }} ↗
+                  </a>
+                </td>
+                <td>{{ prod.categoria.nombre }}</td>
+                <td style="text-align: right; font-weight: 700; color: #059669;">
+                  ${{ prod.precio_sugerido_total_clp|stringformat:",d" }}
+                </td>
+                <td style="text-align: center;">
+                  <span class="admin-badge badge-verde">Validado</span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Sección de Productos Bloqueados -->
+  {% if bloqueados %}
+    <div class="admin-card" style="margin-bottom: 1.5rem; border-color: #fecaca;">
+      <div class="admin-card-header" style="background-color: #fef2f2;">
+        <h3 class="admin-card-title" style="color: #991b1b;">
+          ⚠️ Productos Bloqueados para Publicación ({{ bloqueados|length }})
+        </h3>
+        <span style="font-size: 0.8rem; color: #991b1b;">
+          No se publicarán hasta satisfacer los 8 requisitos de calidad Humm
+        </span>
+      </div>
+      <div class="table-responsive">
+        <table class="admin-table" style="font-size: 0.84rem;">
+          <thead>
+            <tr>
+              <th style="width: 50px;">Foto</th>
+              <th style="width: 140px;">SKU Humm / Prov</th>
+              <th>Nombre Comercial</th>
+              <th>Motivos de Bloqueo (ProductoPublicationService)</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in bloqueados %}
+              {% with prod=item.producto motivos=item.motivos %}
+                <tr>
+                  <td>
+                    <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" style="width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid var(--admin-card-border);">
+                  </td>
+                  <td>
+                    <strong style="color: var(--admin-primary); font-family: monospace;">{{ prod.sku_humm }}</strong>
+                    <div style="font-size: 0.72rem; color: var(--admin-text-muted); font-family: monospace;">{{ prod.sku_proveedor }}</div>
+                  </td>
+                  <td>
+                    <span style="font-weight: 600;">{{ prod.nombre_comercial }}</span>
+                    <div style="font-size: 0.72rem; color: var(--admin-text-muted);">
+                      Estado: {{ prod.get_estado_curaduria_display }}
+                    </div>
+                  </td>
+                  <td>
+                    <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.8rem; color: #b91c1c;">
+                      {% for m in motivos %}
+                        <li>{{ m }}</li>
+                      {% endfor %}
+                    </ul>
+                  </td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <a href="{% url 'gestion:productos_curaduria_lote' %}?ids={{ prod.id }}" class="btn-admin btn-admin-primary" style="padding: 0.25rem 0.55rem; font-size: 0.78rem; background-color: #0284c7;">
+                      ✏️ Curar
+                    </a>
+                  </td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Ya Publicados -->
+  {% if ya_publicados %}
+    <div class="admin-card">
+      <div class="admin-card-header">
+        <h3 class="admin-card-title">Ya Publicados Previamente ({{ ya_publicados|length }})</h3>
+      </div>
+      <div style="padding: 1rem 1.25rem; font-size: 0.82rem; color: var(--admin-text-muted);">
+        {% for p in ya_publicados %}
+          <span style="display: inline-block; background: #dcfce7; color: #166534; padding: 0.2rem 0.5rem; border-radius: 4px; margin: 0.2rem; font-family: monospace;">
+            ● {{ p.sku_humm }} ({{ p.nombre_comercial|truncatechars:30 }})
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

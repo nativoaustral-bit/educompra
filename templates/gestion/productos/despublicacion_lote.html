@@ -1,0 +1,88 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Despublicar Productos — Administración EduCompra{% endblock %}
+{% block page_title %}Despublicación Masiva de Productos{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Advertencia Institucional -->
+  <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-md); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;">
+    <h3 style="margin: 0 0 0.35rem 0; font-size: 1rem; color: #92400e; display: flex; align-items: center; gap: 0.5rem;">
+      <span>⚠️</span> Confirmar Retiro de Productos del Catálogo Público
+    </h3>
+    <p style="margin: 0; font-size: 0.88rem; color: #78350f; line-height: 1.4;">
+      Esta acción cambiará el estado de los siguientes <strong>{{ total_publicados }} productos</strong> a <code>publicado = False</code>.
+      Dejarán de ser visibles para los colegios en el catálogo web y cotizador.
+      <strong>Los productos permanecerán en el catálogo maestro y los snapshots de cotizaciones históricas emitidas no se verán alterados</strong>.
+    </p>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <h3 class="admin-card-title">Productos a Despublicar ({{ total_publicados }})</h3>
+    </div>
+
+    <form method="post" action="{% url 'gestion:productos_despublicacion_lote' %}?ids={{ ids_param }}" style="padding: 1.25rem;">
+      {% csrf_token %}
+      <input type="hidden" name="ids" value="{{ ids_param }}">
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+          Motivo del Retiro / Observación Interna (Opcional, se registrará en auditoría)
+        </label>
+        <input
+          type="text"
+          name="motivo_despublicacion"
+          placeholder="Ej: Quiebre de stock temporal de proveedor, revisión de ficha pedagógica..."
+          class="admin-input"
+          style="width: 100%;"
+        >
+      </div>
+
+      <div class="table-responsive" style="margin-bottom: 1.5rem;">
+        <table class="admin-table" style="font-size: 0.84rem;">
+          <thead>
+            <tr>
+              <th style="width: 140px;">SKU Humm / Prov</th>
+              <th>Nombre Comercial</th>
+              <th>Categoría</th>
+              <th style="text-align: right;">Precio CLP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for prod in productos %}
+              <tr>
+                <td>
+                  <strong style="font-family: monospace; color: var(--admin-primary);">{{ prod.sku_humm }}</strong>
+                  <div style="font-size: 0.72rem; color: var(--admin-text-muted); font-family: monospace;">{{ prod.sku_proveedor }}</div>
+                </td>
+                <td>{{ prod.nombre_comercial }}</td>
+                <td>{{ prod.categoria.nombre|default:"Sin categoría" }}</td>
+                <td style="text-align: right; font-weight: 600;">
+                  ${{ prod.precio_sugerido_total_clp|stringformat:",d" }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">Cancelar</a>
+        <button type="submit" name="accion" value="confirmar_despublicacion" class="btn-admin btn-admin-primary" style="background-color: #dc2626; padding: 0.6rem 1.25rem;" onclick="return confirm('¿Confirmar el retiro de los {{ total_publicados }} productos del catálogo público?');">
+          🚫 Confirmar Retiro de {{ total_publicados }} Productos
+        </button>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

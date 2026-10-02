@@ -25,22 +25,91 @@ from apps.cotizaciones.models import SolicitudItem
 @permiso_requerido("gestion.can_manage_catalogo")
 def productos_lista_view(request):
     """
-    Listado general de administración de catálogo con filtros multidimensionales y switch de publicación.
+    Listado general de administración de catálogo con KPIs dinámicos (Ajuste 4),
+    regla genérica de cuarentena activo=False (Ajuste 3), filtros multidimensionales,
+    tabs de flujo y barra de acciones en lote.
     """
+    # 1. KPIs Dinámicos calculados directamente desde la base de datos (Ajuste 4)
+    total_maestro = Producto.objects.count()
+    total_publicados = Producto.objects.filter(publicado=True).count()
+    total_candidatos = Producto.objects.filter(activo=True, estado_curaduria="CANDIDATO").count()
+    total_validados_no_pub = Producto.objects.filter(activo=True, estado_curaduria="VALIDADO", publicado=False).count()
+    total_sin_revisar = Producto.objects.filter(activo=True, estado_curaduria="SIN_REVISAR").count()
+
+    ids_con_imagen = Producto.objects.filter(
+        activo=True, imagenes__archivo__isnull=False
+    ).exclude(imagenes__archivo="").values_list("id", flat=True)
+    total_sin_imagen = Producto.objects.filter(activo=True).exclude(id__in=ids_con_imagen).count()
+    total_inactivos = Producto.objects.filter(activo=False).count()
+
+    kpis = {
+        "total_maestro": total_maestro,
+        "total_publicados": total_publicados,
+        "total_candidatos": total_candidatos,
+        "total_validados_no_pub": total_validados_no_pub,
+        "total_sin_revisar": total_sin_revisar,
+        "total_sin_imagen": total_sin_imagen,
+        "total_inactivos": total_inactivos,
+    }
+
+    # 2. Manejo de Acciones en Lote POST desde el listado visual
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        selected_ids = request.POST.getlist("selected_ids")
+        if not selected_ids:
+            messages.warning(request, "Debe seleccionar al menos un producto para ejecutar la acción.")
+            return redirect(request.get_full_path())
+
+        if accion == "marcar_candidatos":
+            # Regla Ajuste 3 y 7: solo activos y en estado SIN_REVISAR
+            prods = Producto.objects.filter(id__in=selected_ids, activo=True, estado_curaduria="SIN_REVISAR")
+            cant = prods.update(estado_curaduria="CANDIDATO")
+            omitidos = len(selected_ids) - cant
+            registrar_actividad(
+                request=request,
+                accion="MARCAR_CANDIDATO_LOTE",
+                modelo_afectado="Producto",
+                objeto_id="",
+                descripcion=f"Marcó {cant} productos como CANDIDATO desde el listado visual.",
+                detalles={"total_seleccionados": len(selected_ids), "marcados": cant, "omitidos": omitidos}
+            )
+            msg = f"{cant} producto(s) marcado(s) como CANDIDATO."
+            if omitidos > 0:
+                msg += f" ({omitidos} omitidos por estar inactivos, ya candidatos o validados)."
+            messages.success(request, msg)
+            return redirect(request.get_full_path())
+
+    # 3. Construcción del QuerySet
     qs = Producto.objects.all().select_related("categoria", "proveedor").prefetch_related("imagenes")
 
-    # Buscador por texto (SKU Humm, SKU proveedor, nombre comercial, marca, modelo)
+    # Tab / Flujo rápido
+    tab = request.GET.get("tab", "").strip()
+    if tab == "publicados":
+        qs = qs.filter(publicado=True)
+    elif tab == "candidatos":
+        qs = qs.filter(activo=True, estado_curaduria="CANDIDATO")
+    elif tab == "validados_no_pub":
+        qs = qs.filter(activo=True, estado_curaduria="VALIDADO", publicado=False)
+    elif tab == "sin_revisar":
+        qs = qs.filter(activo=True, estado_curaduria="SIN_REVISAR")
+    elif tab == "sin_imagen":
+        qs = qs.filter(activo=True).exclude(id__in=ids_con_imagen)
+    elif tab == "inactivos":
+        qs = qs.filter(activo=False)
+
+    # Buscador por texto amplio (SKU Humm, SKU proveedor, nombre comercial, original proveedor, marca, modelo)
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
             Q(sku_humm__icontains=q)
             | Q(sku_proveedor__icontains=q)
             | Q(nombre_comercial__icontains=q)
+            | Q(nombre_original_proveedor__icontains=q)
             | Q(marca__icontains=q)
             | Q(modelo__icontains=q)
         )
 
-    # Filtros
+    # Filtros multidimensionales
     categoria_id = request.GET.get("categoria")
     if categoria_id:
         qs = qs.filter(categoria_id=categoria_id)
@@ -54,6 +123,12 @@ def productos_lista_view(request):
         qs = qs.filter(publicado=True)
     elif publicado in ("false", "0"):
         qs = qs.filter(publicado=False)
+
+    activo_filtro = request.GET.get("activo")
+    if activo_filtro in ("true", "1"):
+        qs = qs.filter(activo=True)
+    elif activo_filtro in ("false", "0"):
+        qs = qs.filter(activo=False)
 
     curaduria = request.GET.get("curaduria")
     if curaduria:
@@ -81,8 +156,15 @@ def productos_lista_view(request):
 
     total_productos = qs.count()
 
-    # Paginación (25 productos por página)
-    paginator = Paginator(qs, 25)
+    # Paginación configurable (25, 50, 100)
+    try:
+        per_page = int(request.GET.get("per_page", 25))
+        if per_page not in (25, 50, 100):
+            per_page = 25
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(qs, per_page)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
@@ -93,6 +175,8 @@ def productos_lista_view(request):
     context = {
         "page_obj": page_obj,
         "total_productos": total_productos,
+        "kpis": kpis,
+        "tab_activa": tab,
         "categorias": categorias,
         "proveedores": proveedores,
         "curaduria_choices": Producto.ESTADOS_CURADURIA,
@@ -103,14 +187,17 @@ def productos_lista_view(request):
         "categoria_activa": categoria_id,
         "proveedor_activo": proveedor_id,
         "publicado_activo": publicado,
+        "activo_activo": activo_filtro,
         "curaduria_activa": curaduria,
         "validacion_activa": validacion,
         "stock_activo": stock,
         "dificultad_activa": dificultad,
         "destacado_activo": destacado,
         "orden_activo": orden,
+        "per_page": per_page,
     }
     return render(request, "gestion/productos/lista.html", context)
+
 
 
 @gestion_required

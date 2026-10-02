@@ -1,0 +1,410 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Pricing y Recargo Comercial — Administración EduCompra{% endblock %}
+{% block page_title %}Gestión de Pricing y Recargo Comercial{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo Maestro
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- 1. Parámetros Financieros Vigentes -->
+  <div class="admin-card" style="margin-bottom: 1.5rem;">
+    <div class="admin-card-header" style="background-color: #f8fafc;">
+      <h3 class="admin-card-title">Parámetros Financieros Globales Vigentes</h3>
+      <span style="font-size: 0.8rem; color: var(--admin-text-muted);">
+        Última actualización: {{ config.updated_at|date:"d/m/Y H:i" }}
+      </span>
+    </div>
+    <div style="padding: 1.25rem;">
+      <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 0;">
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-title">Tipo de Cambio</div>
+          <div class="kpi-value" style="font-size: 1.5rem; color: var(--admin-primary); font-family: monospace;">
+            ${{ config.tipo_cambio_usd_clp }}
+          </div>
+          <div class="kpi-footer">CLP por USD</div>
+        </div>
+
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-title">Flete / Internación</div>
+          <div class="kpi-value" style="font-size: 1.5rem; font-family: monospace;">
+            {{ config.factor_internacion_flete_porcentaje }}%
+          </div>
+          <div class="kpi-footer">Aduana y transporte intl.</div>
+        </div>
+
+        <div class="kpi-card" style="padding: 1rem; border-left: 3px solid #2563eb;">
+          <div class="kpi-title" style="color: #2563eb;">Recargo Comercial</div>
+          <div class="kpi-value" style="font-size: 1.5rem; color: #2563eb; font-family: monospace;">
+            {{ config.recargo_general_porcentaje }}%
+          </div>
+          <div class="kpi-footer">Sugerido general Humm</div>
+        </div>
+
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-title">IVA Chile</div>
+          <div class="kpi-value" style="font-size: 1.5rem; font-family: monospace;">
+            {{ config.iva_porcentaje }}%
+          </div>
+          <div class="kpi-footer">Impuesto legal vigente</div>
+        </div>
+
+        <div class="kpi-card" style="padding: 1rem; border-left: 3px solid #8b5cf6;">
+          <div class="kpi-title" style="color: #8b5cf6;">Recargo Específico</div>
+          <div class="kpi-value" style="font-size: 1.5rem; color: #8b5cf6;">
+            {{ total_con_recargo_personalizado }}
+          </div>
+          <div class="kpi-footer">Productos con tasa propia (Ajuste 1)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Simulador y Aplicador de Precios (Ajustes 1 y 2) -->
+  <div class="admin-card" style="margin-bottom: 2rem;">
+    <div class="admin-card-header">
+      <div>
+        <h3 class="admin-card-title">Simulador de Impacto y Aplicación de Precios</h3>
+        <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--admin-text-muted);">
+          Ajuste 1 y 2: La simulación corre 100% en memoria. Al aplicar, el servidor recalcula y aplica en transacción atómica.
+        </p>
+      </div>
+    </div>
+
+    <div style="padding: 1.5rem;">
+      <form method="post" action="{% url 'gestion:precios_dashboard' %}">
+        {% csrf_token %}
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+          <div>
+            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.25rem;">
+              Tipo de Cambio USD a CLP ($)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              name="tipo_cambio"
+              value="{{ parametros_sim.tipo_cambio }}"
+              class="admin-input"
+              style="width: 100%; font-family: monospace; font-size: 0.95rem;"
+              required
+            >
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.25rem;">
+              Factor Internación / Flete (%)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              name="factor_internacion"
+              value="{{ parametros_sim.factor_internacion }}"
+              class="admin-input"
+              style="width: 100%; font-family: monospace; font-size: 0.95rem;"
+              required
+            >
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.25rem;">
+              Recargo Comercial General (%)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              name="recargo_general"
+              value="{{ parametros_sim.recargo_general }}"
+              class="admin-input"
+              style="width: 100%; font-family: monospace; font-size: 0.95rem;"
+              required
+            >
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.25rem;">
+              IVA (%)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              name="iva"
+              value="{{ parametros_sim.iva }}"
+              class="admin-input"
+              style="width: 100%; font-family: monospace; font-size: 0.95rem;"
+              required
+            >
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.25rem;">
+              Alcance de la Operación
+            </label>
+            <select name="alcance" class="admin-select" style="width: 100%;">
+              <option value="activos" {% if parametros_sim.alcance == 'activos' %}selected{% endif %}>
+                Todos los activos con costo ({{ total_activos_con_costo }})
+              </option>
+              <option value="publicados" {% if parametros_sim.alcance == 'publicados' %}selected{% endif %}>
+                Solo productos publicados ({{ total_publicados_con_costo }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--admin-card-border); padding-top: 1rem;">
+          <div style="font-size: 0.8rem; color: var(--admin-text-muted);">
+            💡 Los productos con <strong>recargo específico</strong> conservan su propio porcentaje (Ajuste 1).
+          </div>
+          <button type="submit" name="accion" value="simular_impacto" class="btn-admin btn-admin-primary" style="background-color: #2563eb; font-size: 0.9rem; padding: 0.55rem 1.25rem;">
+            🔍 Simular Impacto (En Memoria)
+          </button>
+        </div>
+
+        <!-- 3. Resultados de la Simulación en Memoria -->
+        {% if simulacion %}
+          <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px dashed #cbd5e1;">
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--admin-primary); display: flex; align-items: center; gap: 0.5rem;">
+                <span>📊</span> Diagnóstico de Simulación (Alcance: {{ simulacion.alcance|upper }})
+              </h4>
+
+              <div class="sim-grid">
+                <div class="sim-metric-card">
+                  <div class="kpi-title">Productos Afectados</div>
+                  <div class="kpi-value" style="font-size: 1.4rem;">{{ simulacion.total_afectados }}</div>
+                  <div class="kpi-footer">{{ simulacion.total_con_recargo_especifico }} con recargo propio</div>
+                </div>
+
+                <div class="sim-metric-card">
+                  <div class="kpi-title">Precio Promedio Actual</div>
+                  <div class="kpi-value" style="font-size: 1.4rem; font-family: monospace;">
+                    ${{ simulacion.promedio_actual|stringformat:",d" }}
+                  </div>
+                  <div class="kpi-footer">CLP total con IVA</div>
+                </div>
+
+                <div class="sim-metric-card">
+                  <div class="kpi-title">Precio Promedio Simulado</div>
+                  <div class="kpi-value" style="font-size: 1.4rem; font-family: monospace; color: var(--admin-accent);">
+                    ${{ simulacion.promedio_simulado|stringformat:",d" }}
+                  </div>
+                  <div class="kpi-footer">Con nuevos parámetros</div>
+                </div>
+
+                <div class="sim-metric-card">
+                  <div class="kpi-title">Variación Promedio</div>
+                  <div class="kpi-value {% if simulacion.diferencia_promedio > 0 %}diff-positive{% elif simulacion.diferencia_promedio < 0 %}diff-negative{% else %}diff-neutral{% endif %}" style="font-size: 1.4rem; font-family: monospace;">
+                    {% if simulacion.diferencia_promedio > 0 %}+{% endif %}{{ simulacion.pct_diferencia_promedio }}%
+                  </div>
+                  <div class="kpi-footer">
+                    ({% if simulacion.diferencia_promedio > 0 %}+{% endif %}${{ simulacion.diferencia_promedio|stringformat:",d" }})
+                  </div>
+                </div>
+              </div>
+
+              <!-- Muestra de Contraste -->
+              <div style="font-size: 0.82rem; font-weight: 700; color: #475569; margin-bottom: 0.5rem;">
+                Muestra de Contraste (Primeros 10 productos del lote):
+              </div>
+              <div class="table-responsive" style="background: #fff; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border);">
+                <table class="admin-table" style="font-size: 0.8rem;">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Nombre</th>
+                      <th style="text-align: right;">Costo USD</th>
+                      <th style="text-align: center;">Recargo Usado</th>
+                      <th style="text-align: right;">Precio Actual</th>
+                      <th style="text-align: right;">Precio Simulado</th>
+                      <th style="text-align: right;">Diferencia CLP</th>
+                      <th style="text-align: right;">Var %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for m in simulacion.muestra %}
+                      <tr>
+                        <td><strong style="font-family: monospace;">{{ m.sku_humm }}</strong></td>
+                        <td>{{ m.nombre|truncatechars:28 }}</td>
+                        <td style="text-align: right; font-family: monospace;">${{ m.costo_usd }}</td>
+                        <td style="text-align: center;">
+                          {% if m.es_especifico %}
+                            <span class="admin-badge" style="background: #e0e7ff; color: #3730a3;" title="Conserva recargo específico">
+                              {{ m.recargo_usado }}%*
+                            </span>
+                          {% else %}
+                            <span style="color: #64748b;">{{ m.recargo_usado }}% (Gral)</span>
+                          {% endif %}
+                        </td>
+                        <td style="text-align: right; font-family: monospace;">
+                          ${{ m.precio_actual|stringformat:",d" }}
+                        </td>
+                        <td style="text-align: right; font-family: monospace; font-weight: 700; color: var(--admin-accent);">
+                          ${{ m.precio_simulado|stringformat:",d" }}
+                        </td>
+                        <td style="text-align: right; font-family: monospace;" class="{% if m.diferencia > 0 %}diff-positive{% elif m.diferencia < 0 %}diff-negative{% else %}diff-neutral{% endif %}">
+                          {% if m.diferencia > 0 %}+{% endif %}${{ m.diferencia|stringformat:",d" }}
+                        </td>
+                        <td style="text-align: right; font-family: monospace;" class="{% if m.pct_diferencia > 0 %}diff-positive{% elif m.pct_diferencia < 0 %}diff-negative{% else %}diff-neutral{% endif %}">
+                          {% if m.pct_diferencia > 0 %}+{% endif %}{{ m.pct_diferencia }}%
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Botón de Aplicación Real en Servidor (Ajuste 2) -->
+              <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius-sm); padding: 1rem; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                  <div style="font-weight: 700; color: #9f1239; font-size: 0.9rem;">
+                    ⚠️ Aplicación Definitiva en Servidor (Transacción Atómica)
+                  </div>
+                  <div style="font-size: 0.78rem; color: #be123c; margin-top: 0.15rem;">
+                    El servidor recalculará y guardará los precios en BD para los {{ simulacion.total_afectados }} productos. Si ocurre algún error, se revertirá toda la operación.
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  name="accion"
+                  value="aplicar_precios_servidor"
+                  class="btn-admin btn-admin-primary"
+                  style="background-color: #e11d48; font-size: 0.9rem; padding: 0.6rem 1.25rem;"
+                  onclick="return confirm('¿CONFIRMAR LA APLICACIÓN REAL DE PRECIOS?\n\nSe actualizarán los precios en base de datos para {{ simulacion.total_afectados }} productos.\nLos {{ simulacion.total_con_recargo_especifico }} productos con recargo específico recalcularán conservando su recargo propio.\nEsta acción quedará registrada en auditoría.');"
+                >
+                  ⚡ APLICAR CAMBIO DE PRECIOS EN SERVIDOR
+                </button>
+              </div>
+
+            </div>
+          </div>
+        {% endif %}
+
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Acción Comercial Separada: Recargos Específicos (Ajuste 1) -->
+  <div class="admin-card">
+    <div class="admin-card-header" style="background-color: #f8fafc;">
+      <div>
+        <h3 class="admin-card-title">Acción Comercial: Asignar Recargo Específico</h3>
+        <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--admin-text-muted);">
+          Ajuste 1: Modificar el recargo comercial específico de productos constituye una acción comercial separada y explícita.
+        </p>
+      </div>
+    </div>
+
+    <div style="padding: 1.5rem;">
+      <form method="post" action="{% url 'gestion:precios_dashboard' %}">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="asignar_recargo_especifico">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem;">
+          <!-- Tipo de Selección -->
+          <div>
+            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.4rem;">
+              1. Seleccionar Destino
+            </label>
+            <div style="display: flex; gap: 1rem; margin-bottom: 0.75rem;">
+              <label style="font-size: 0.85rem; cursor: pointer;">
+                <input type="radio" name="tipo_seleccion" value="categoria" checked onchange="toggleDestinoRecargo();">
+                Por Categoría
+              </label>
+              <label style="font-size: 0.85rem; cursor: pointer;">
+                <input type="radio" name="tipo_seleccion" value="sku_lista" id="radio-sku" onchange="toggleDestinoRecargo();">
+                Por Lista de SKU
+              </label>
+            </div>
+
+            <!-- Selector Categoría -->
+            <div id="target-categoria">
+              <select name="categoria_id" class="admin-select" style="width: 100%;">
+                <option value="">Seleccionar categoría...</option>
+                {% for cat in categorias %}
+                  <option value="{{ cat.id }}">{{ cat.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Entrada SKU -->
+            <div id="target-sku" style="display: none;">
+              <textarea
+                name="skus_lista"
+                rows="3"
+                placeholder="Pegue SKU separados por coma o salto de línea (ej: KS0011, KS0012)"
+                class="admin-input"
+                style="width: 100%; font-family: monospace; font-size: 0.85rem;"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Recargo a Asignar -->
+          <div>
+            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.4rem;">
+              2. Nuevo Recargo Comercial Específico (%)
+            </label>
+            <div style="margin-bottom: 0.75rem;">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="500"
+                id="input-recargo-esp"
+                name="porcentaje_recargo_especifico"
+                placeholder="Ej: 60.00"
+                class="admin-input"
+                style="width: 160px; font-family: monospace; font-size: 0.95rem;"
+              >
+              <span style="font-size: 0.85rem; color: #64748b; margin-left: 0.35rem;">%</span>
+            </div>
+
+            <div>
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #475569; cursor: pointer;">
+                <input type="checkbox" name="limpiar_recargo" value="1" id="chk-limpiar" onchange="toggleLimpiar();">
+                <span>Eliminar recargo específico (volver al recargo general vigente)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--admin-card-border);">
+          <button type="submit" class="btn-admin btn-admin-primary" style="background-color: #6366f1; font-size: 0.88rem;" onclick="return confirm('¿Confirmar la asignación de recargo específico? Los precios derivados serán recalculados inmediatamente.');">
+            🏷️ Aplicar Recargo Específico
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function toggleDestinoRecargo() {
+    const isSku = document.getElementById('radio-sku').checked;
+    document.getElementById('target-categoria').style.display = isSku ? 'none' : 'block';
+    document.getElementById('target-sku').style.display = isSku ? 'block' : 'none';
+  }
+
+  function toggleLimpiar() {
+    const limpiar = document.getElementById('chk-limpiar').checked;
+    const inputRec = document.getElementById('input-recargo-esp');
+    if (limpiar) {
+      inputRec.disabled = true;
+      inputRec.style.opacity = '0.5';
+      inputRec.value = '';
+    } else {
+      inputRec.disabled = false;
+      inputRec.style.opacity = '1';
+    }
+  }
+</script>
+{% endblock %}

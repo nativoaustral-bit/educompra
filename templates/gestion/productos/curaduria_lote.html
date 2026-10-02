@@ -1,0 +1,296 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Curaduría por Lote — Administración EduCompra{% endblock %}
+{% block page_title %}Curaduría Pedagógica por Lote ({{ total_lote }} productos){% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Candidatos
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Resumen de Trabajo -->
+  <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; color: var(--admin-primary); display: flex; align-items: center; gap: 0.5rem;">
+        <span>✏️</span> Revisión Pedagógica y Comercial (Ajuste 5)
+      </h3>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--admin-text-muted);">
+        Compare la <strong>evidencia del proveedor</strong> a la izquierda con los <strong>campos pedagógicos de Humm</strong> a la derecha.
+        Ningún producto se valida sin revisión explícita humana.
+      </p>
+    </div>
+    <div style="font-size: 0.85rem; color: #64748b;">
+      Lote activo: <strong>{{ total_lote }}</strong> productos
+    </div>
+  </div>
+
+  <!-- Lista Consecutiva de Tarjetas de Curaduría -->
+  {% for item in tarjetas %}
+    {% with p=item.producto prop=item.propuesta %}
+      <div class="curation-card" id="card-{{ p.id }}">
+        <!-- Header de la Tarjeta -->
+        <div class="curation-card-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <strong style="font-family: monospace; font-size: 0.95rem; color: var(--admin-primary);">
+              {{ p.sku_humm }}
+            </strong>
+            <span style="font-size: 0.85rem; color: var(--admin-text-muted); font-family: monospace;">
+              (Prov: {{ p.sku_proveedor }})
+            </span>
+            <span class="admin-badge {% if p.estado_curaduria == 'VALIDADO' %}badge-verde{% elif p.estado_curaduria == 'CANDIDATO' %}badge-info{% elif p.estado_curaduria == 'EN_CURADURIA' %}badge-amarillo{% else %}badge-gris{% endif %}">
+              {{ p.get_estado_curaduria_display }}
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button type="button" class="btn-admin btn-admin-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" onclick="aplicarPropuesta('{{ p.id }}');" title="Cargar sugerencias determinísticas simples">
+              💡 Cargar Propuesta Base
+            </button>
+            <span id="badge-prop-{{ p.id }}" class="badge-propuesta" style="display: none;">
+              PROPUESTA — REQUIERE REVISIÓN HUMANA
+            </span>
+          </div>
+        </div>
+
+        <!-- Cuerpo Split: Evidencia Proveedor vs Humm -->
+        <div class="curation-split">
+          <!-- Columna Izquierda: Evidencia Proveedor (Solo Lectura) -->
+          <div class="curation-provider">
+            <div>
+              <img src="{{ p.imagen_principal_url }}" alt="{{ p.nombre_comercial }}" class="curation-provider-thumb">
+            </div>
+
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Nombre Original Proveedor</div>
+              <div style="font-weight: 600; color: #1e293b; margin-top: 0.15rem; font-size: 0.85rem;">
+                {{ p.nombre_original_proveedor|default:"No informado" }}
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Costo y Precios Base</div>
+              <div style="display: flex; justify-content: space-between; margin-top: 0.25rem; font-size: 0.85rem;">
+                <span>Costo Proveedor:</span>
+                <strong style="font-family: monospace;">USD ${{ p.costo_proveedor_usd }}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 0.15rem; font-size: 0.85rem;">
+                <span>Costo Puesto Chile:</span>
+                <span style="font-family: monospace;">CLP ${{ p.costo_puesto_chile_clp|stringformat:",d" }}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 0.15rem; font-size: 0.85rem;">
+                <span>Precio Ref. Total (IVA):</span>
+                <strong style="color: #059669;">CLP ${{ p.precio_sugerido_total_clp|stringformat:",d" }}</strong>
+              </div>
+            </div>
+
+            <!-- Tramos de precios si existen -->
+            {% if item.tramos %}
+              <div>
+                <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.25rem;">Tramos por Volumen Proveedor</div>
+                <div style="background: #fff; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 0.4rem; font-size: 0.75rem;">
+                  {% for tramo in item.tramos %}
+                    <div style="display: flex; justify-content: space-between; font-family: monospace;">
+                      <span>{{ tramo.cantidad_minima }}+ unid:</span>
+                      <strong>USD ${{ tramo.precio_usd }}</strong>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            <!-- Features Originales Proveedor -->
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.2rem;">Features Fabricante</div>
+              <div style="background: #fff; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 0.5rem; max-height: 140px; overflow-y: auto; font-size: 0.75rem; color: #475569; line-height: 1.35; white-space: pre-wrap;">
+                {{ p.features_proveedor|default:"Sin descripción técnica adicional del fabricante." }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Formulario Curaduría Humm -->
+          <div class="curation-humm-form">
+            <form method="post" action="{% url 'gestion:productos_curaduria_lote' %}?ids={{ ids_param }}">
+              {% csrf_token %}
+              <input type="hidden" name="producto_id" value="{{ p.id }}">
+              <input type="hidden" name="ids" value="{{ ids_param }}">
+
+              <!-- Nombre Comercial -->
+              <div style="margin-bottom: 0.85rem;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                  Nombre Comercial (Visible al docente) *
+                </label>
+                <input
+                  type="text"
+                  id="nom-{{ p.id }}"
+                  name="nombre_comercial_{{ p.id }}"
+                  value="{{ p.nombre_comercial }}"
+                  data-propuesta="{{ prop.nombre_comercial }}"
+                  class="admin-input"
+                  style="width: 100%; font-size: 0.9rem;"
+                  required
+                >
+              </div>
+
+              <!-- Categoría y Nivel de Dificultad -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                <div>
+                  <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                    Categoría Pedagógica *
+                  </label>
+                  <select
+                    id="cat-{{ p.id }}"
+                    name="categoria_{{ p.id }}"
+                    data-propuesta="{{ prop.categoria_id }}"
+                    class="admin-select"
+                    style="width: 100%;"
+                    required
+                  >
+                    <option value="">Seleccionar categoría...</option>
+                    {% for cat in categorias %}
+                      <option value="{{ cat.id }}" {% if p.categoria_id == cat.id %}selected{% endif %}>
+                        {{ cat.nombre }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                    Nivel Educativo / Dificultad
+                  </label>
+                  <select name="dificultad_{{ p.id }}" class="admin-select" style="width: 100%;">
+                    {% for cod, label in dificultad_choices %}
+                      <option value="{{ cod }}" {% if p.nivel_dificultad == cod %}selected{% endif %}>
+                        {{ label }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Descripción Educativa (Mínimo 15 caracteres) -->
+              <div style="margin-bottom: 0.85rem;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                  Descripción Pedagógica / Educativa (mínimo 15 caracteres) *
+                </label>
+                <textarea
+                  id="desc-{{ p.id }}"
+                  name="descripcion_educativa_{{ p.id }}"
+                  data-propuesta="{{ prop.descripcion_educativa }}"
+                  rows="3"
+                  class="admin-input"
+                  style="width: 100%; font-size: 0.85rem; line-height: 1.4;"
+                  required
+                >{{ p.descripcion_educativa }}</textarea>
+              </div>
+
+              <!-- Uso Educativo y Advertencia -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                <div>
+                  <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                    Uso Educativo y Proyectos de Aula
+                  </label>
+                  <textarea
+                    id="uso-{{ p.id }}"
+                    name="uso_educativo_{{ p.id }}"
+                    data-propuesta="{{ prop.uso_educativo }}"
+                    rows="2"
+                    class="admin-input"
+                    style="width: 100%; font-size: 0.82rem;"
+                  >{{ p.uso_educativo }}</textarea>
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.2rem;">
+                    Advertencia de Seguridad o Supervisión
+                  </label>
+                  <textarea
+                    name="advertencia_uso_{{ p.id }}"
+                    rows="2"
+                    placeholder="Ej: Requiere supervisión por componentes pequeños o soldadura..."
+                    class="admin-input"
+                    style="width: 100%; font-size: 0.82rem;"
+                  >{{ p.advertencia_uso }}</textarea>
+                </div>
+              </div>
+
+              <!-- Tecnologías Compatibles -->
+              <div style="margin-bottom: 1rem;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                  Tecnologías Compatibles
+                </label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
+                  {% for tech in tecnologias %}
+                    <label style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; background: #f8fafc; padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--admin-card-border); cursor: pointer;">
+                      <input
+                        type="checkbox"
+                        name="tecnologias_{{ p.id }}"
+                        value="{{ tech.id }}"
+                        {% if tech.id in item.tecnologias_seleccionadas %}checked{% endif %}
+                      >
+                      <span>{{ tech.nombre }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <!-- Barra de Acciones de la Tarjeta -->
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--admin-card-border);">
+                <div>
+                  <button type="submit" name="accion" value="descartar_item" class="btn-admin btn-admin-secondary" style="color: #dc2626; font-size: 0.8rem;" onclick="return confirm('¿Descartar este producto del catálogo público? Permanecerá en el maestro como registro histórico.');">
+                    ✕ Descartar de Catálogo Público
+                  </button>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                  <button type="submit" name="accion" value="guardar_borrador_item" class="btn-admin btn-admin-secondary" style="font-size: 0.85rem;">
+                    💾 Guardar Borrador
+                  </button>
+                  <button type="submit" name="accion" value="validar_item" class="btn-admin btn-admin-primary" style="background-color: #16a34a; font-size: 0.85rem;">
+                    ✓ Validar Curaduría Pedagógica
+                  </button>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endwith %}
+  {% endfor %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function aplicarPropuesta(prodId) {
+    const inputNom = document.getElementById('nom-' + prodId);
+    const selectCat = document.getElementById('cat-' + prodId);
+    const inputDesc = document.getElementById('desc-' + prodId);
+    const inputUso = document.getElementById('uso-' + prodId);
+    const badgeProp = document.getElementById('badge-prop-' + prodId);
+
+    if (inputNom && inputNom.dataset.propuesta) {
+      inputNom.value = inputNom.dataset.propuesta;
+    }
+    if (selectCat && selectCat.dataset.propuesta) {
+      selectCat.value = selectCat.dataset.propuesta;
+    }
+    if (inputDesc && inputDesc.dataset.propuesta) {
+      inputDesc.value = inputDesc.dataset.propuesta;
+    }
+    if (inputUso && inputUso.dataset.propuesta) {
+      inputUso.value = inputUso.dataset.propuesta;
+    }
+    if (badgeProp) {
+      badgeProp.style.display = 'inline-block';
+    }
+  }
+</script>
+{% endblock %}

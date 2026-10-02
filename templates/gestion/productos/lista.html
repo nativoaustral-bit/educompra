@@ -1,32 +1,132 @@
 {% extends "gestion/base_gestion.html" %}
 {% load static %}
 
-{% block title %}Catálogo de Productos — Administración EduCompra{% endblock %}
+{% block title %}Catálogo Maestro — Administración EduCompra{% endblock %}
 {% block page_title %}Catálogo Maestro de Productos{% endblock %}
 
 {% block topbar_actions %}
+  <a href="{% url 'gestion:productos_seleccion_sku' %}" class="btn-admin btn-admin-primary" style="background-color: #4338ca;">
+    📋 Selección por SKU
+  </a>
+  <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-primary" style="background-color: #0284c7;">
+    🎯 Curaduría / Candidatos
+  </a>
+  <a href="{% url 'gestion:precios_dashboard' %}" class="btn-admin btn-admin-secondary">
+    💰 Pricing y Simulador
+  </a>
   <a href="{% url 'gestion:exportar_csv' 'productos' %}" class="btn-admin btn-admin-secondary">
     📥 Exportar CSV
   </a>
-  <a href="{% url 'gestion:importaciones' %}" class="btn-admin btn-admin-secondary">
-    📥 Importar Excel
-  </a>
-  <a href="{% url 'gestion:producto_crear' %}" class="btn-admin btn-admin-primary">
-    + Nuevo Producto
+  <a href="{% url 'gestion:producto_crear' %}" class="btn-admin btn-admin-secondary">
+    + Nuevo
   </a>
 {% endblock %}
 
 {% block content %}
 <div class="gestion-panel">
-  <!-- Filtros Multidimensionales -->
-  <form method="get" class="admin-filters-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-end;">
-    <div style="flex: 1 1 240px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar SKU, Nombre, Marca</label>
-      <input type="text" name="q" value="{{ q }}" placeholder="Ej: HUMM-UNO, sensor, Keyestudio..." class="admin-input" style="width: 100%;">
+
+  <!-- 1. Tarjetas KPI Dinámicas (Ajuste 4: estrictamente calculadas desde BD) -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+    <a href="{% url 'gestion:productos_lista' %}" class="kpi-card" style="padding: 0.9rem; text-decoration: none;">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Maestro</span>
+        <span class="kpi-icon">📦</span>
+      </div>
+      <div class="kpi-value">{{ kpis.total_maestro }}</div>
+      <div class="kpi-footer">Total catálogo abastecimiento</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_lista' %}?tab=publicados" class="kpi-card" style="padding: 0.9rem; text-decoration: none; border-left: 3px solid #059669;">
+      <div class="kpi-card-header">
+        <span class="kpi-title" style="color: #059669;">Publicados</span>
+        <span class="kpi-icon">🌐</span>
+      </div>
+      <div class="kpi-value" style="color: #059669;">{{ kpis.total_publicados }}</div>
+      <div class="kpi-footer">Visibles para colegios</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_candidatos' %}" class="kpi-card" style="padding: 0.9rem; text-decoration: none; border-left: 3px solid #2563eb;">
+      <div class="kpi-card-header">
+        <span class="kpi-title" style="color: #2563eb;">Candidatos</span>
+        <span class="kpi-icon">🎯</span>
+      </div>
+      <div class="kpi-value" style="color: #2563eb;">{{ kpis.total_candidatos }}</div>
+      <div class="kpi-footer">En cola de curaduría</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_lista' %}?tab=validados_no_pub" class="kpi-card" style="padding: 0.9rem; text-decoration: none; border-left: 3px solid #d97706;">
+      <div class="kpi-card-header">
+        <span class="kpi-title" style="color: #d97706;">Validados no pub.</span>
+        <span class="kpi-icon">⏳</span>
+      </div>
+      <div class="kpi-value" style="color: #d97706;">{{ kpis.total_validados_no_pub }}</div>
+      <div class="kpi-footer">Listos para publicar</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_lista' %}?tab=sin_revisar" class="kpi-card" style="padding: 0.9rem; text-decoration: none;">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Sin revisar</span>
+        <span class="kpi-icon">📁</span>
+      </div>
+      <div class="kpi-value">{{ kpis.total_sin_revisar }}</div>
+      <div class="kpi-footer">En banco maestro</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_lista' %}?tab=sin_imagen" class="kpi-card" style="padding: 0.9rem; text-decoration: none;">
+      <div class="kpi-card-header">
+        <span class="kpi-title" style="color: #e11d48;">Sin Imagen</span>
+        <span class="kpi-icon">📷</span>
+      </div>
+      <div class="kpi-value" style="color: #e11d48;">{{ kpis.total_sin_imagen }}</div>
+      <div class="kpi-footer">Requieren foto</div>
+    </a>
+
+    <a href="{% url 'gestion:productos_lista' %}?tab=inactivos" class="kpi-card" style="padding: 0.9rem; text-decoration: none; border-left: 3px solid #64748b;">
+      <div class="kpi-card-header">
+        <span class="kpi-title">Inactivos / Cuarentena</span>
+        <span class="kpi-icon">🚫</span>
+      </div>
+      <div class="kpi-value">{{ kpis.total_inactivos }}</div>
+      <div class="kpi-footer">Excluidos de operación</div>
+    </a>
+  </div>
+
+  <!-- 2. Pastillas de Flujo Rápido (Tabs) -->
+  <div class="filter-tabs">
+    <a href="{% url 'gestion:productos_lista' %}" class="filter-tab {% if not tab_activa %}active{% endif %}">
+      Todos <span class="tab-count">{{ kpis.total_maestro }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=publicados" class="filter-tab {% if tab_activa == 'publicados' %}active{% endif %}">
+      🌐 Publicados <span class="tab-count">{{ kpis.total_publicados }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=candidatos" class="filter-tab {% if tab_activa == 'candidatos' %}active{% endif %}">
+      🎯 Candidatos <span class="tab-count">{{ kpis.total_candidatos }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=validados_no_pub" class="filter-tab {% if tab_activa == 'validados_no_pub' %}active{% endif %}">
+      ⏳ Validados no pub. <span class="tab-count">{{ kpis.total_validados_no_pub }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=sin_revisar" class="filter-tab {% if tab_activa == 'sin_revisar' %}active{% endif %}">
+      📁 Sin revisar <span class="tab-count">{{ kpis.total_sin_revisar }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=sin_imagen" class="filter-tab {% if tab_activa == 'sin_imagen' %}active{% endif %}">
+      📷 Sin foto <span class="tab-count">{{ kpis.total_sin_imagen }}</span>
+    </a>
+    <a href="{% url 'gestion:productos_lista' %}?tab=inactivos" class="filter-tab {% if tab_activa == 'inactivos' %}active{% endif %}">
+      🚫 Inactivos <span class="tab-count">{{ kpis.total_inactivos }}</span>
+    </a>
+  </div>
+
+  <!-- 3. Filtros y Buscador Amplio -->
+  <form method="get" class="admin-filters-bar" style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.25rem; align-items: flex-end; background: #fff; padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--admin-card-border);">
+    {% if tab_activa %}<input type="hidden" name="tab" value="{{ tab_activa }}">{% endif %}
+
+    <div style="flex: 1 1 220px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Buscar SKU, Nombre comercial u original</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Ej: KS0011, HUMM-KEY, sensor, Arduino..." class="admin-input" style="width: 100%;">
     </div>
 
-    <div style="flex: 0 1 180px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Categoría</label>
+    <div style="flex: 0 1 170px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Categoría</label>
       <select name="categoria" class="admin-select" style="width: 100%;">
         <option value="">Todas las categorías</option>
         {% for cat in categorias %}
@@ -35,179 +135,197 @@
       </select>
     </div>
 
-    <div style="flex: 0 1 160px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Proveedor</label>
-      <select name="proveedor" class="admin-select" style="width: 100%;">
-        <option value="">Todos los proveedores</option>
-        {% for prov in proveedores %}
-          <option value="{{ prov.id }}" {% if proveedor_activo == prov.id|stringformat:"s" %}selected{% endif %}>{{ prov.nombre }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div style="flex: 0 1 140px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Publicado</label>
-      <select name="publicado" class="admin-select" style="width: 100%;">
-        <option value="">Todos</option>
-        <option value="true" {% if publicado_activo == 'true' %}selected{% endif %}>Publicados (Online)</option>
-        <option value="false" {% if publicado_activo == 'false' %}selected{% endif %}>No Publicados (Borrador)</option>
-      </select>
-    </div>
-
     <div style="flex: 0 1 150px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Curaduría</label>
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Curaduría</label>
       <select name="curaduria" class="admin-select" style="width: 100%;">
-        <option value="">Todas</option>
+        <option value="">Todos los estados</option>
         {% for cod, label in curaduria_choices %}
           <option value="{{ cod }}" {% if curaduria_activa == cod %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>
 
-    <div style="flex: 0 1 160px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Espec. Neutral</label>
-      <select name="validacion" class="admin-select" style="width: 100%;">
-        <option value="">Todas</option>
-        {% for cod, label in validacion_choices %}
-          <option value="{{ cod }}" {% if validacion_activa == cod %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div style="flex: 0 1 140px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Stock</label>
-      <select name="stock" class="admin-select" style="width: 100%;">
-        <option value="">Todos</option>
-        {% for cod, label in stock_choices %}
-          <option value="{{ cod }}" {% if stock_activo == cod %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
     <div style="flex: 0 1 130px;">
-      <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Destacado</label>
-      <select name="destacado" class="admin-select" style="width: 100%;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Publicado</label>
+      <select name="publicado" class="admin-select" style="width: 100%;">
         <option value="">Todos</option>
-        <option value="true" {% if destacado_activo == 'true' %}selected{% endif %}>Solo Destacados</option>
+        <option value="true" {% if publicado_activo == 'true' %}selected{% endif %}>Publicado</option>
+        <option value="false" {% if publicado_activo == 'false' %}selected{% endif %}>No publicado</option>
       </select>
     </div>
 
-    <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+    <div style="flex: 0 1 120px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Activo</label>
+      <select name="activo" class="admin-select" style="width: 100%;">
+        <option value="">Todos</option>
+        <option value="true" {% if activo_activo == 'true' %}selected{% endif %}>Activos</option>
+        <option value="false" {% if activo_activo == 'false' %}selected{% endif %}>Inactivos</option>
+      </select>
+    </div>
+
+    <div style="flex: 0 1 100px;">
+      <label style="display: block; font-size: 0.72rem; font-weight: 700; color: var(--admin-text-muted); margin-bottom: 0.25rem;">Por página</label>
+      <select name="per_page" class="admin-select" style="width: 100%;">
+        <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.4rem; align-items: flex-end;">
       <button type="submit" class="btn-admin btn-admin-primary">Filtrar</button>
       <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary" title="Limpiar filtros">Limpiar</a>
     </div>
   </form>
 
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-    <div style="font-size: 0.9rem; color: var(--admin-text-muted);">
-      Total: <strong>{{ total_productos }}</strong> productos encontrados
+  <!-- 4. Resumen de Conteo -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--admin-text-muted);">
+    <div>Mostrando <strong>{{ total_productos }}</strong> productos según criterios actuales.</div>
+    <div style="font-size: 0.8rem;">
+      <span style="color: #64748b;">💡 Seleccione filas con checkbox para acciones en lote de la página actual.</span>
     </div>
   </div>
 
-  <!-- Tabla de Productos -->
-  <div class="admin-table-container">
-    <table class="admin-table">
-      <thead>
-        <tr>
-          <th style="width: 60px;">Foto</th>
-          <th>SKU Humm</th>
-          <th>Nombre Comercial</th>
-          <th>Categoría</th>
-          <th>Costo USD</th>
-          <th>Precio Sugerido CLP</th>
-          <th>Curaduría</th>
-          <th>Espec. Neutral</th>
-          <th>Publicado</th>
-          <th style="text-align: right;">Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for prod in page_obj %}
+  <!-- 5. Formulario de Tabla con Selección en Lote -->
+  <form id="batch-form" method="post" action="{% url 'gestion:productos_lista' %}">
+    {% csrf_token %}
+
+    <div class="admin-table-container">
+      <table class="admin-table" style="font-size: 0.84rem;">
+        <thead>
           <tr>
-            <td>
-              {% if prod.imagen_principal %}
-                <img src="{{ prod.imagen_principal.url }}" alt="{{ prod.nombre_comercial }}" style="width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid var(--admin-card-border);">
-              {% else %}
-                <div style="width: 44px; height: 44px; background: #f1f5f9; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #94a3b8;">Sin foto</div>
-              {% endif %}
-            </td>
-            <td>
-              <strong style="color: var(--admin-primary); font-family: monospace;">{{ prod.sku_humm }}</strong>
-              <div style="font-size: 0.75rem; color: var(--admin-text-muted);">Prov: {{ prod.sku_proveedor }}</div>
-            </td>
-            <td>
-              <a href="{% url 'gestion:producto_detalle' prod.id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
-                {{ prod.nombre_comercial }}
-              </a>
-              {% if prod.destacado %}
-                <span class="admin-badge badge-amarillo" style="font-size: 0.65rem; margin-left: 0.25rem;">★ Destacado</span>
-              {% endif %}
-            </td>
-            <td>
-              <span style="font-size: 0.85rem;">{{ prod.categoria.nombre|default:"Sin categoría" }}</span>
-            </td>
-            <td>
-              <span style="font-family: monospace;">${{ prod.costo_proveedor_usd|default:"0.00" }}</span>
-            </td>
-            <td>
-              <strong>${{ prod.precio_sugerido_total_clp|stringformat:",d" }}</strong>
-              <div style="font-size: 0.7rem; color: var(--admin-text-muted);">(Neto: ${{ prod.precio_sugerido_neto_clp|stringformat:",d" }})</div>
-            </td>
-            <td>
-              {% if prod.estado_curaduria == 'VALIDADO' %}
-                <span class="admin-badge badge-verde">Validado</span>
-              {% elif prod.estado_curaduria == 'EN_REVISION' %}
-                <span class="admin-badge badge-amarillo">En Revisión</span>
-              {% elif prod.estado_curaduria == 'RECHAZADO' %}
-                <span class="admin-badge badge-rojo">Rechazado</span>
-              {% else %}
-                <span class="admin-badge badge-gris">Sin Revisar</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if prod.estado_especificacion_neutral == 'VALIDADO_HUMM' %}
-                <span class="admin-badge badge-verde">Validado Humm</span>
-              {% elif prod.estado_especificacion_neutral == 'EN_REVISION' %}
-                <span class="admin-badge badge-amarillo">En Revisión</span>
-              {% else %}
-                <span class="admin-badge badge-gris">No Revisado</span>
-              {% endif %}
-            </td>
-            <td>
-              <form action="{% url 'gestion:producto_toggle_publicado' prod.id %}" method="post" style="display: inline;">
-                {% csrf_token %}
-                {% if prod.publicado %}
-                  <button type="submit" class="admin-badge badge-verde" style="cursor: pointer; border: none;" title="Click para despublicar de la web">
-                    ● Publicado
-                  </button>
-                {% else %}
-                  <button type="submit" class="admin-badge badge-gris" style="cursor: pointer; border: none;" title="Click para publicar en la web (requiere validación)">
-                    ○ Borrador
-                  </button>
+            <th style="width: 36px; text-align: center;">
+              <input type="checkbox" id="select-all-visible" title="Seleccionar visibles en esta página">
+            </th>
+            <th style="width: 50px;">Foto</th>
+            <th style="width: 150px;">SKU Humm / Prov</th>
+            <th>Nombre Comercial / Original</th>
+            <th>Categoría</th>
+            <th style="text-align: right;">Costo USD</th>
+            <th style="text-align: right;">Recargo</th>
+            <th style="text-align: right;">Precio Ref. CLP</th>
+            <th style="text-align: center;">Curaduría</th>
+            <th style="text-align: center;">Estado</th>
+            <th style="text-align: right;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for prod in page_obj %}
+            <tr {% if not prod.activo %}style="background-color: #fef2f2; opacity: 0.85;"{% endif %}>
+              <td style="text-align: center;">
+                <input type="checkbox" name="selected_ids" value="{{ prod.id }}" class="row-checkbox">
+              </td>
+              <td>
+                <img src="{{ prod.imagen_principal_url }}" alt="{{ prod.nombre_comercial }}" style="width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 4px; border: 1px solid var(--admin-card-border);">
+              </td>
+              <td>
+                <strong style="color: var(--admin-primary); font-family: monospace; font-size: 0.82rem;">{{ prod.sku_humm }}</strong>
+                <div style="font-size: 0.72rem; color: var(--admin-text-muted); font-family: monospace;">Prov: {{ prod.sku_proveedor }}</div>
+              </td>
+              <td>
+                <a href="{% url 'gestion:producto_detalle' prod.id %}" style="font-weight: 600; color: var(--admin-text-main); text-decoration: none;">
+                  {{ prod.nombre_comercial }}
+                </a>
+                {% if prod.nombre_original_proveedor and prod.nombre_original_proveedor != prod.nombre_comercial %}
+                  <div style="font-size: 0.72rem; color: #64748b; font-style: italic; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ prod.nombre_original_proveedor }}">
+                    Orig: {{ prod.nombre_original_proveedor }}
+                  </div>
                 {% endif %}
-              </form>
-            </td>
-            <td style="text-align: right; white-space: nowrap;">
-              <a href="{% url 'gestion:producto_detalle' prod.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Ver</a>
-              <a href="{% url 'gestion:producto_editar' prod.id %}" class="btn-admin btn-admin-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Editar</a>
-            </td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="10" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
-              No se encontraron productos que coincidan con los filtros aplicados.
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+                {% if prod.destacado %}
+                  <span class="admin-badge badge-amarillo" style="font-size: 0.65rem; margin-top: 0.2rem;">★ Destacado</span>
+                {% endif %}
+              </td>
+              <td>
+                <span style="font-size: 0.8rem;">{{ prod.categoria.nombre|default:"Sin categoría" }}</span>
+              </td>
+              <td style="text-align: right; font-family: monospace;">
+                ${{ prod.costo_proveedor_usd|default:"0.00" }}
+              </td>
+              <td style="text-align: right;">
+                {% if prod.porcentaje_recargo is not None %}
+                  <span class="admin-badge" style="background: #e0e7ff; color: #3730a3; font-size: 0.75rem;" title="Recargo específico personalizado">
+                    {{ prod.porcentaje_recargo }}%*
+                  </span>
+                {% else %}
+                  <span style="font-size: 0.75rem; color: #64748b;" title="Aplica recargo general">Gral</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <strong>${{ prod.precio_sugerido_total_clp|stringformat:",d" }}</strong>
+                <div style="font-size: 0.7rem; color: var(--admin-text-muted);">(Neto: ${{ prod.precio_sugerido_neto_clp|stringformat:",d" }})</div>
+              </td>
+              <td style="text-align: center;">
+                {% if prod.estado_curaduria == 'VALIDADO' %}
+                  <span class="admin-badge badge-verde">Validado</span>
+                {% elif prod.estado_curaduria == 'CANDIDATO' %}
+                  <span class="admin-badge" style="background: #dbeafe; color: #1e40af;">Candidato</span>
+                {% elif prod.estado_curaduria == 'EN_CURADURIA' %}
+                  <span class="admin-badge badge-amarillo">En Curaduría</span>
+                {% elif prod.estado_curaduria == 'DESCARTADO_CATALOGO_PUBLICO' %}
+                  <span class="admin-badge" style="background: #f1f5f9; color: #64748b;">Descartado</span>
+                {% else %}
+                  <span class="admin-badge badge-gris">Sin revisar</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if not prod.activo %}
+                  <span class="admin-badge badge-rojo" title="Cuarentena / Inactivo">Inactivo</span>
+                {% elif prod.publicado %}
+                  <span class="admin-badge badge-verde">● Publicado</span>
+                {% else %}
+                  <span class="admin-badge badge-gris">○ Borrador</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'gestion:producto_detalle' prod.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.78rem;">Ver</a>
+                <a href="{% url 'gestion:producto_editar' prod.id %}" class="btn-admin btn-admin-primary" style="padding: 0.2rem 0.45rem; font-size: 0.78rem;">Editar</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="11" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+                No se encontraron productos que coincidan con los criterios seleccionados.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 6. Barra Flotante de Selección (Ajuste 7: visibilidad explícita del conteo) -->
+    <div id="batch-toolbar" class="batch-toolbar" style="display: none;">
+      <div>
+        <span class="batch-toolbar-count" id="selected-counter">0</span> productos seleccionados en esta página
+      </div>
+      <div class="batch-toolbar-actions">
+        <button type="submit" name="accion" value="marcar_candidatos" class="btn-admin btn-admin-primary" style="background-color: #2563eb; font-size: 0.82rem;" onclick="return confirm('¿Marcar los productos seleccionados como CANDIDATO a catálogo público? (Solo se aplicará a productos activos sin revisar)');">
+          🎯 Marcar como Candidatos
+        </button>
+
+        <button type="button" class="btn-admin btn-admin-primary" style="background-color: #0284c7; font-size: 0.82rem;" onclick="irALote('curaduria');">
+          ✏️ Curar en Lote
+        </button>
+
+        <button type="button" class="btn-admin btn-admin-primary" style="background-color: #059669; font-size: 0.82rem;" onclick="irALote('publicacion');">
+          🌐 Evaluar Publicación
+        </button>
+
+        <button type="button" class="btn-admin btn-admin-secondary" style="background-color: #334155; color: #fff; border: none; font-size: 0.82rem;" onclick="irALote('despublicacion');">
+          🚫 Despublicar
+        </button>
+
+        <button type="button" class="btn-admin btn-admin-secondary" style="font-size: 0.82rem;" onclick="limpiarSeleccion();">
+          ✕ Cancelar
+        </button>
+      </div>
+    </div>
+  </form>
 
   <!-- Paginación -->
   {% if page_obj.has_other_pages %}
     <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
       {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&categoria={{ categoria_activa }}&publicado={{ publicado_activo }}&curaduria={{ curaduria_activa }}" class="btn-admin btn-admin-secondary">« Anterior</a>
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&tab={{ tab_activa }}&categoria={{ categoria_activa }}&publicado={{ publicado_activo }}&activo={{ activo_activo }}&curaduria={{ curaduria_activa }}&per_page={{ per_page }}" class="btn-admin btn-admin-secondary">« Anterior</a>
       {% endif %}
 
       <span style="font-size: 0.85rem; color: var(--admin-text-muted);">
@@ -215,9 +333,64 @@
       </span>
 
       {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&categoria={{ categoria_activa }}&publicado={{ publicado_activo }}&curaduria={{ curaduria_activa }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&tab={{ tab_activa }}&categoria={{ categoria_activa }}&publicado={{ publicado_activo }}&activo={{ activo_activo }}&curaduria={{ curaduria_activa }}&per_page={{ per_page }}" class="btn-admin btn-admin-secondary">Siguiente »</a>
       {% endif %}
     </div>
   {% endif %}
+
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const checkAll = document.getElementById('select-all-visible');
+  const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+  const batchToolbar = document.getElementById('batch-toolbar');
+  const selectedCounter = document.getElementById('selected-counter');
+
+  function updateBatchState() {
+    const checked = Array.from(rowCheckboxes).filter(cb => cb.checked);
+    const count = checked.length;
+    if (count > 0) {
+      batchToolbar.style.display = 'flex';
+      selectedCounter.textContent = count;
+    } else {
+      batchToolbar.style.display = 'none';
+      if (checkAll) checkAll.checked = false;
+    }
+  }
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function() {
+      rowCheckboxes.forEach(cb => { cb.checked = checkAll.checked; });
+      updateBatchState();
+    });
+  }
+
+  rowCheckboxes.forEach(cb => {
+    cb.addEventListener('change', updateBatchState);
+  });
+
+  function limpiarSeleccion() {
+    rowCheckboxes.forEach(cb => { cb.checked = false; });
+    if (checkAll) checkAll.checked = false;
+    updateBatchState();
+  }
+
+  function irALote(tipo) {
+    const checked = Array.from(rowCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+    if (checked.length === 0) {
+      alert('Debe seleccionar al menos un producto.');
+      return;
+    }
+    const idsParam = checked.join(',');
+    if (tipo === 'curaduria') {
+      window.location.href = "{% url 'gestion:productos_curaduria_lote' %}?ids=" + idsParam;
+    } else if (tipo === 'publicacion') {
+      window.location.href = "{% url 'gestion:productos_publicacion_lote' %}?ids=" + idsParam;
+    } else if (tipo === 'despublicacion') {
+      window.location.href = "{% url 'gestion:productos_despublicacion_lote' %}?ids=" + idsParam;
+    }
+  }
+</script>
 {% endblock %}

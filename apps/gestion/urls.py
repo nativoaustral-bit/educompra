@@ -7,6 +7,10 @@ from apps.gestion.views import (
     auth,
     dashboard,
     productos,
+    productos_seleccion,
+    productos_curaduria,
+    productos_publicacion,
+    precios,
     importaciones,
     solicitudes,
     establecimientos,
@@ -27,12 +31,21 @@ urlpatterns = [
     # Dashboard Principal
     path("", dashboard.dashboard_view, name="dashboard"),
 
-    # Catálogo & Productos
+    # Catálogo & Productos (Gestión Simplificada Fase 5A)
     path("productos/", productos.productos_lista_view, name="productos_lista"),
     path("productos/nuevo/", productos.producto_crear_view, name="producto_crear"),
+    path("productos/seleccion-sku/", productos_seleccion.productos_seleccion_sku_view, name="productos_seleccion_sku"),
+    path("productos/candidatos/", productos_curaduria.productos_candidatos_view, name="productos_candidatos"),
+    path("productos/curaduria-lote/", productos_curaduria.productos_curaduria_lote_view, name="productos_curaduria_lote"),
+    path("productos/curaduria-masiva-campos/", productos_curaduria.productos_curaduria_masiva_campos_view, name="productos_curaduria_masiva_campos"),
+    path("productos/publicacion-lote/", productos_publicacion.productos_publicacion_lote_view, name="productos_publicacion_lote"),
+    path("productos/despublicacion-lote/", productos_publicacion.productos_despublicacion_lote_view, name="productos_despublicacion_lote"),
     path("productos/<int:id>/", productos.producto_detalle_view, name="producto_detalle"),
     path("productos/<int:id>/editar/", productos.producto_editar_view, name="producto_editar"),
     path("productos/<int:id>/toggle-publicado/", productos.producto_toggle_publicado_view, name="producto_toggle_publicado"),
+
+    # Pricing y Simulador
+    path("precios/", precios.precios_dashboard_view, name="precios_dashboard"),
 
     # Importaciones Web Asistidas (DRY-RUN en 6 pasos)
     path("importaciones/", importaciones.importaciones_lista_view, name="importaciones"),

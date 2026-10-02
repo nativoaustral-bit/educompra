@@ -1,0 +1,227 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Selección Masiva por Lista de SKU — Administración EduCompra{% endblock %}
+{% block page_title %}Selección Masiva por Lista de SKU{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:productos_candidatos' %}" class="btn-admin btn-admin-primary" style="background-color: #0284c7;">
+    🎯 Ver Candidatos Actuales
+  </a>
+  <a href="{% url 'gestion:productos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver al Catálogo
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="gestion-panel">
+
+  <!-- Introducción / Instrucciones -->
+  <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+    <h3 style="margin: 0 0 0.4rem 0; font-size: 0.95rem; color: #1e40af; display: flex; align-items: center; gap: 0.5rem;">
+      <span>📋</span> Herramienta de Selección Masiva Segura (Ajuste 7)
+    </h3>
+    <p style="margin: 0; font-size: 0.85rem; color: #1e3a8a; line-height: 1.4;">
+      Pegue aquí la lista de SKU (código de fabricante ej: <code>KS0011</code> o SKU interno Humm ej: <code>HUMM-KEY-KS0011</code>)
+      que Humm desea priorizar para su incorporación al catálogo escolar. El sistema primero ejecutará un
+      <strong>pre-análisis de diagnóstico sin modificar la base de datos</strong>.
+    </p>
+  </div>
+
+  <!-- Formulario de Entrada de Texto -->
+  <div class="admin-card" style="margin-bottom: 1.5rem;">
+    <div class="admin-card-header">
+      <h3 class="admin-card-title">1. Pegar Lista de Códigos SKU</h3>
+      <span style="font-size: 0.8rem; color: var(--admin-text-muted);">Soporta saltos de línea, comas, puntos y comas o espacios</span>
+    </div>
+    <div style="padding: 1.25rem;">
+      <form method="post" action="{% url 'gestion:productos_seleccion_sku' %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 1rem;">
+          <textarea
+            name="skus_texto"
+            rows="6"
+            placeholder="Pegue aquí los códigos SKU. Ejemplo:
+KS0011
+KS0012, KS0013; KS0014
+KS0015"
+            class="admin-input"
+            style="width: 100%; font-family: monospace; font-size: 0.9rem; line-height: 1.4; padding: 0.75rem; box-sizing: border-box;"
+            required
+          >{{ skus_input }}</textarea>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 0.8rem; color: var(--admin-text-muted);">
+            💡 El sistema normaliza automáticamente a mayúsculas y deduplica repeticiones.
+          </div>
+          <button type="submit" name="accion" value="preanalizar" class="btn-admin btn-admin-primary" style="background-color: #4338ca;">
+            🔍 Pre-analizar Diagnóstico de Lista
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Resultados del Pre-Análisis de Diagnóstico -->
+  {% if analisis %}
+    <div class="admin-card" style="margin-bottom: 1.5rem;">
+      <div class="admin-card-header" style="background-color: #f8fafc;">
+        <h3 class="admin-card-title">2. Diagnóstico del Lote Ingresado</h3>
+        <span class="admin-badge badge-info" style="font-size: 0.8rem;">
+          {{ analisis.total_tokens }} códigos ingresados
+        </span>
+      </div>
+
+      <!-- Resumen en KPIs -->
+      <div style="padding: 1.25rem; border-bottom: 1px solid var(--admin-card-border);">
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+          <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-title">Ingresados</div>
+            <div class="kpi-value" style="font-size: 1.4rem;">{{ analisis.total_tokens }}</div>
+            <div class="kpi-footer">SKU únicos</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem; border-left: 3px solid #059669;">
+            <div class="kpi-title" style="color: #059669;">Encontrados</div>
+            <div class="kpi-value" style="font-size: 1.4rem; color: #059669;">{{ analisis.total_encontrados }}</div>
+            <div class="kpi-footer">En catálogo maestro</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem; border-left: 3px solid #2563eb;">
+            <div class="kpi-title" style="color: #2563eb;">Aptos Candidato</div>
+            <div class="kpi-value" style="font-size: 1.4rem; color: #2563eb;">{{ analisis.aptos_candidato_count }}</div>
+            <div class="kpi-footer">Listos para marcar</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-title">Ya Publicados</div>
+            <div class="kpi-value" style="font-size: 1.4rem;">{{ analisis.ya_publicados_count }}</div>
+            <div class="kpi-footer">No requieren acción</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem;">
+            <div class="kpi-title">Ya Validados</div>
+            <div class="kpi-value" style="font-size: 1.4rem;">{{ analisis.validados_no_pub_count }}</div>
+            <div class="kpi-footer">Listos para publicar</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem; border-left: 3px solid #dc2626;">
+            <div class="kpi-title" style="color: #dc2626;">Inactivos / Cuar.</div>
+            <div class="kpi-value" style="font-size: 1.4rem; color: #dc2626;">{{ analisis.inactivos_cuarentena_count }}</div>
+            <div class="kpi-footer">Excluidos (Ajuste 3)</div>
+          </div>
+
+          <div class="kpi-card" style="padding: 0.75rem; border-left: 3px solid #94a3b8;">
+            <div class="kpi-title">No Encontrados</div>
+            <div class="kpi-value" style="font-size: 1.4rem; color: #64748b;">{{ analisis.total_faltantes }}</div>
+            <div class="kpi-footer">Fuera del maestro</div>
+          </div>
+        </div>
+
+        <!-- Alerta de Advertencia de Faltantes o Inactivos -->
+        {% if analisis.faltantes %}
+          <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); padding: 0.6rem 0.9rem; font-size: 0.8rem; color: #92400e; margin-bottom: 0.75rem;">
+            <strong>⚠️ SKU No Encontrados en Maestro ({{ analisis.total_faltantes }}):</strong>
+            <span style="font-family: monospace;">{{ analisis.faltantes|join:", " }}</span>
+          </div>
+        {% endif %}
+
+        <!-- Panel de Confirmación de Acción -->
+        {% if analisis.aptos_candidato_count > 0 %}
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <div style="font-weight: 700; color: #166534; font-size: 0.95rem;">
+                ✓ Se encontraron {{ analisis.aptos_candidato_count }} productos aptos para ingresar a Curaduría.
+              </div>
+              <div style="font-size: 0.8rem; color: #15803d; margin-top: 0.2rem;">
+                Al confirmar, se marcarán con <code>estado_curaduria = 'CANDIDATO'</code>. Los {{ analisis.ya_publicados_count }} ya publicados y los {{ analisis.inactivos_cuarentena_count }} inactivos serán preservados intactos.
+              </div>
+            </div>
+
+            <form method="post" action="{% url 'gestion:productos_seleccion_sku' %}">
+              {% csrf_token %}
+              <input type="hidden" name="skus_texto" value="{{ skus_input }}">
+              <button type="submit" name="accion" value="confirmar_marcado_candidatos" class="btn-admin btn-admin-primary" style="background-color: #16a34a; font-size: 0.9rem; padding: 0.6rem 1.25rem;" onclick="return confirm('¿Confirmar el marcado de {{ analisis.aptos_candidato_count }} productos como CANDIDATO?');">
+                🎯 Marcar {{ analisis.aptos_candidato_count }} Productos como Candidatos
+              </button>
+            </form>
+          </div>
+        {% else %}
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.85rem 1.25rem; font-size: 0.85rem; color: var(--admin-text-muted);">
+            ℹ️ No hay productos en la lista que requieran ser marcados como candidatos (todos los encontrados ya están publicados, en curaduría, validados o inactivos).
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Tabla Detallada de Diagnóstico -->
+      <div class="table-responsive">
+        <table class="admin-table" style="font-size: 0.82rem;">
+          <thead>
+            <tr>
+              <th style="width: 130px;">SKU Ingresado</th>
+              <th style="width: 150px;">SKU Proveedor / Humm</th>
+              <th>Nombre Comercial</th>
+              <th>Categoría</th>
+              <th style="text-align: center;">Foto</th>
+              <th style="text-align: center;">Diagnóstico</th>
+              <th>Motivo / Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in analisis.diagnostico_filas %}
+              <tr>
+                <td><strong style="font-family: monospace;">{{ fila.token }}</strong></td>
+                <td>
+                  {% if fila.producto %}
+                    <span style="font-family: monospace; color: var(--admin-primary);">{{ fila.producto.sku_humm }}</span>
+                    <div style="font-size: 0.7rem; color: #64748b; font-family: monospace;">Prov: {{ fila.producto.sku_proveedor }}</div>
+                  {% else %}
+                    <span style="color: #94a3b8;">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if fila.producto %}
+                    <a href="{% url 'gestion:producto_detalle' fila.producto.id %}" target="_blank" style="text-decoration: none; color: inherit; font-weight: 600;">
+                      {{ fila.producto.nombre_comercial }} ↗
+                    </a>
+                  {% else %}
+                    <span style="color: #94a3b8; font-style: italic;">No registrado en base unificada</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if fila.producto %}
+                    {{ fila.producto.categoria.nombre|default:"Sin categoría" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td style="text-align: center;">
+                  {% if fila.producto %}
+                    {% if fila.producto.imagenes.exists %}
+                      <span title="Con imagen">📷 Sí</span>
+                    {% else %}
+                      <span style="color: #dc2626;" title="Sin imagen">❌ No</span>
+                    {% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td style="text-align: center;">
+                  <span class="admin-badge {{ fila.clase_badge }}">
+                    {{ fila.estado_desc }}
+                  </span>
+                </td>
+                <td style="font-size: 0.8rem; color: var(--admin-text-muted);">
+                  {{ fila.motivo }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
