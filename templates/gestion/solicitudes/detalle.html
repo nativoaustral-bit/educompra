@@ -11,6 +11,11 @@
   <a href="{% url 'gestion:solicitudes_kanban' %}" class="btn-admin btn-admin-secondary">
     🗂️ Ver en Tablero Kanban
   </a>
+  {% if solicitud.es_prueba %}
+    <a href="{% url 'gestion:solicitud_eliminar' solicitud.id %}" class="btn-admin btn-admin-danger" style="background: #dc2626; color: #fff; font-weight: 700;">
+      🗑️ Eliminar solicitud de prueba
+    </a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -25,11 +30,14 @@
 {% endif %}
 
 {% if solicitud.es_prueba %}
-  <div class="admin-alert admin-alert-danger" style="margin-bottom: 1.5rem;">
+  <div class="admin-alert admin-alert-danger" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
     <div>
       <strong>🧪 SOLICITUD DE PRUEBA INTERNA HUMM:</strong>
       Esta solicitud está marcada como prueba y se encuentra excluida de los reportes y métricas de analítica comercial.
     </div>
+    <a href="{% url 'gestion:solicitud_eliminar' solicitud.id %}" class="btn-admin btn-admin-danger" style="background: #dc2626; color: #fff; font-weight: 700; white-space: nowrap;">
+      🗑️ Eliminar solicitud de prueba
+    </a>
   </div>
 {% endif %}
 

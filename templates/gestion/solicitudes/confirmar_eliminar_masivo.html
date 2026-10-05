@@ -1,0 +1,97 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Confirmar Eliminación Masiva de Pruebas — Administración EduCompra{% endblock %}
+{% block page_title %}Limpieza Masiva de Solicitudes de Prueba{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:solicitudes_lista' %}?ver_pruebas=1" class="btn-admin btn-admin-secondary">
+    ← Volver al Listado
+  </a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+
+  <div class="gestion-panel" style="border-top: 4px solid #dc2626;">
+    <div class="panel-header" style="margin-bottom: 1.25rem;">
+      <div>
+        <h2 class="panel-title" style="color: #dc2626; display: flex; align-items: center; gap: 0.5rem;">
+          ⚠️ Confirmación de Eliminación Masiva de Pruebas
+        </h2>
+        <div style="font-size: 0.85rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+          Se han seleccionado <strong>{{ total_seleccionadas }}</strong> solicitudes de prueba para eliminación permanente.
+        </div>
+      </div>
+      <span class="admin-badge badge-rojo" style="font-size: 0.75rem;">ACCIÓN MASIVA</span>
+    </div>
+
+    <!-- Advertencia Formal Obligatoria -->
+    <div class="admin-alert admin-alert-danger" style="margin-bottom: 1.5rem; line-height: 1.6;">
+      <blockquote>
+        Esta acción eliminará permanentemente las solicitudes de prueba seleccionadas y sus registros dependientes. No afectará productos del catálogo ni solicitudes reales.
+      </blockquote>
+    </div>
+
+    <!-- Tabla con Datos Exigidos de las Solicitudes Seleccionadas -->
+    <div class="admin-table-container" style="margin-bottom: 1.5rem;">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Fecha</th>
+            <th>Solicitante / Contacto</th>
+            <th>Establecimiento</th>
+            <th style="text-align: center;">Cotización Formal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in solicitudes_confirmacion %}
+            <tr style="background: #fff1f2;">
+              <td style="font-family: monospace; font-weight: 700; color: var(--admin-primary);">
+                {{ item.codigo }}
+              </td>
+              <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
+                {{ item.fecha|date:"d/m/Y H:i" }}
+              </td>
+              <td>
+                <div style="font-weight: 600;">{{ item.solicitante }}</div>
+                <div style="font-size: 0.75rem; color: var(--admin-text-muted);">{{ item.email }}</div>
+              </td>
+              <td style="font-size: 0.85rem;">
+                {{ item.establecimiento }}
+              </td>
+              <td style="text-align: center;">
+                {% if item.tiene_cotizacion %}
+                  <span class="admin-badge badge-amarillo" style="font-size: 0.7rem;">⚠️ Sí (cascada)</span>
+                {% else %}
+                  <span class="admin-badge badge-verde" style="font-size: 0.7rem;">No posee</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Formulario POST + CSRF con confirmación -->
+    <form method="post" action="{% url 'gestion:solicitudes_eliminar_masivo' %}" style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-top: 1.5rem;">
+      {% csrf_token %}
+      {% for sid in selected_ids %}
+        <input type="hidden" name="selected_ids" value="{{ sid }}">
+      {% endfor %}
+      <input type="hidden" name="confirmar" value="1">
+
+      <a href="{% url 'gestion:solicitudes_lista' %}?ver_pruebas=1" class="btn-admin btn-admin-secondary" style="padding: 0.6rem 1.25rem;">
+        Cancelar
+      </a>
+
+      <button type="submit" class="btn-admin btn-admin-danger" style="background: #dc2626; color: #ffffff; font-weight: 700; padding: 0.6rem 1.5rem; border: none; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem;">
+        🗑️ ELIMINAR PRUEBAS SELECCIONADAS ({{ total_seleccionadas }})
+      </button>
+    </form>
+
+  </div>
+
+</div>
+{% endblock %}

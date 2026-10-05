@@ -6,10 +6,13 @@ Incluye vista dual Tabla / Tablero Kanban (Ajustes #19, #20, #21 y #29).
 from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from apps.gestion.decorators import gestion_required, permiso_requerido
@@ -258,3 +261,161 @@ def solicitud_cambiar_estado_view(request, id):
         })
 
     return redirect("gestion:solicitud_detalle", id=solicitud.id)
+
+
+@gestion_required
+@permiso_requerido("gestion.can_manage_solicitudes")
+def solicitud_eliminar_view(request, id):
+    """
+    Eliminación controlada y segura de solicitudes de prueba interna (es_prueba=True).
+    Rechaza estrictamente la eliminación de solicitudes comerciales reales (es_prueba=False).
+    Requiere confirmación explícita y se ejecuta mediante POST + CSRF.
+    """
+    solicitud = get_object_or_404(
+        SolicitudCotizacion.objects.select_related("establecimiento_ref", "contacto_ref"),
+        id=id
+    )
+
+    # REGLA DE SEGURIDAD OBLIGATORIA (Ajuste Humm):
+    # El backend debe impedir completamente eliminar cualquier solicitud donde es_prueba == False.
+    if not solicitud.es_prueba:
+        raise PermissionDenied("Seguridad EduCompra: Las solicitudes comerciales reales no pueden ser eliminadas.")
+
+    tiene_cotizacion = hasattr(solicitud, "cotizacion_formal") and solicitud.cotizacion_formal is not None
+
+    if request.method == "POST":
+        if request.POST.get("confirmar") != "1":
+            messages.warning(request, "Confirmación no recibida. La solicitud de prueba no fue eliminada.")
+            return redirect("gestion:solicitud_detalle", id=solicitud.id)
+
+        # Doble verificación estricta en servidor
+        if not solicitud.es_prueba:
+            raise PermissionDenied("Seguridad EduCompra: Las solicitudes comerciales reales no pueden ser eliminadas.")
+
+        codigo = solicitud.codigo_seguimiento
+        sol_id = solicitud.id
+        establecimiento_nombre = solicitud.establecimiento
+        email_sol = solicitud.email
+        fecha_creacion = solicitud.created_at.isoformat() if solicitud.created_at else None
+
+        with transaction.atomic():
+            # AUDITORÍA OBLIGATORIA ANTES DE ELIMINAR
+            registrar_actividad(
+                request=request,
+                accion="CAMBIO_ESTADO_SOLICITUD",
+                modelo_afectado="SolicitudCotizacion",
+                objeto_id=str(sol_id),
+                descripcion="ELIMINACIÓN CONTROLADA DE SOLICITUD DE PRUEBA",
+                detalles={
+                    "usuario": request.user.username if request.user.is_authenticated else "Sistema",
+                    "codigo_seguimiento": codigo,
+                    "id": sol_id,
+                    "establecimiento": establecimiento_nombre,
+                    "email": email_sol,
+                    "fecha": fecha_creacion,
+                    "existencia_cotizacion_asociada": tiene_cotizacion,
+                }
+            )
+            solicitud.delete()
+
+        messages.success(
+            request,
+            f"Solicitud de prueba {codigo} y sus registros dependientes fueron eliminados permanentemente."
+        )
+        return redirect(reverse("gestion:solicitudes_lista") + "?ver_pruebas=1")
+
+    # GET: Mostrar pantalla de confirmación
+    context = {
+        "solicitud": solicitud,
+        "codigo_seguimiento": solicitud.codigo_seguimiento,
+        "nombre_solicitante": solicitud.nombre_solicitante,
+        "establecimiento": solicitud.establecimiento,
+        "fecha": solicitud.created_at,
+        "cantidad_productos": solicitud.items.count(),
+        "monto_referencial": solicitud.total_referencial_estimado,
+        "tiene_cotizacion_formal": tiene_cotizacion,
+    }
+    return render(request, "gestion/solicitudes/confirmar_eliminar.html", context)
+
+
+@gestion_required
+@permiso_requerido("gestion.can_manage_solicitudes")
+def solicitudes_eliminar_masivo_view(request):
+    """
+    Limpieza masiva controlada de solicitudes de prueba seleccionadas.
+    Solo acepta registros donde es_prueba=True.
+    Requiere confirmación explícita y se ejecuta bajo transaction.atomic().
+    """
+    if request.method != "POST":
+        return redirect(reverse("gestion:solicitudes_lista") + "?ver_pruebas=1")
+
+    selected_ids = request.POST.getlist("selected_ids")
+    if not selected_ids:
+        messages.warning(request, "Debe seleccionar al menos una solicitud de prueba.")
+        return redirect(reverse("gestion:solicitudes_lista") + "?ver_pruebas=1")
+
+    # Obtener solicitudes seleccionadas
+    solicitudes = SolicitudCotizacion.objects.filter(id__in=selected_ids)
+
+    # REGLA DE SEGURIDAD OBLIGATORIA:
+    # La selección solo debe aceptar registros es_prueba=True.
+    if solicitudes.filter(es_prueba=False).exists():
+        raise PermissionDenied(
+            "Seguridad EduCompra: Se detectaron solicitudes comerciales reales en la selección. "
+            "La eliminación masiva solo está autorizada para solicitudes de prueba."
+        )
+
+    solicitudes_pruebas = list(solicitudes.filter(es_prueba=True))
+    if not solicitudes_pruebas:
+        messages.warning(request, "No se encontraron solicitudes de prueba válidas en la selección.")
+        return redirect(reverse("gestion:solicitudes_lista") + "?ver_pruebas=1")
+
+    # Si viene con confirmación explícita, ejecutar dentro de transaction.atomic()
+    if request.POST.get("confirmar") == "1":
+        with transaction.atomic():
+            conteo = len(solicitudes_pruebas)
+            for sol in solicitudes_pruebas:
+                tiene_cot = hasattr(sol, "cotizacion_formal") and sol.cotizacion_formal is not None
+                registrar_actividad(
+                    request=request,
+                    accion="CAMBIO_ESTADO_SOLICITUD",
+                    modelo_afectado="SolicitudCotizacion",
+                    objeto_id=str(sol.id),
+                    descripcion="ELIMINACIÓN CONTROLADA DE SOLICITUD DE PRUEBA",
+                    detalles={
+                        "usuario": request.user.username if request.user.is_authenticated else "Sistema",
+                        "codigo_seguimiento": sol.codigo_seguimiento,
+                        "id": sol.id,
+                        "establecimiento": sol.establecimiento,
+                        "email": sol.email,
+                        "fecha": sol.created_at.isoformat() if sol.created_at else None,
+                        "existencia_cotizacion_asociada": tiene_cot,
+                        "eliminacion_masiva": True,
+                    }
+                )
+                sol.delete()
+
+        messages.success(request, f"Se eliminaron exitosamente {conteo} solicitudes de prueba seleccionadas.")
+        return redirect(reverse("gestion:solicitudes_lista") + "?ver_pruebas=1")
+
+    # Mostrar pantalla de confirmación masiva
+    items_confirmacion = []
+    for s in solicitudes_pruebas:
+        tiene_cot = hasattr(s, "cotizacion_formal") and s.cotizacion_formal is not None
+        items_confirmacion.append({
+            "solicitud": s,
+            "codigo": s.codigo_seguimiento,
+            "fecha": s.created_at,
+            "solicitante": s.nombre_solicitante,
+            "email": s.email,
+            "establecimiento": s.establecimiento,
+            "tiene_cotizacion": tiene_cot,
+        })
+
+    context = {
+        "solicitudes_confirmacion": items_confirmacion,
+        "total_seleccionadas": len(solicitudes_pruebas),
+        "selected_ids": [str(s.id) for s in solicitudes_pruebas],
+    }
+    return render(request, "gestion/solicitudes/confirmar_eliminar_masivo.html", context)
+

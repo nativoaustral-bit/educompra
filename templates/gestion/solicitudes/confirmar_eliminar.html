@@ -1,0 +1,99 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Confirmar Eliminación — Solicitud {{ codigo_seguimiento }}{% endblock %}
+{% block page_title %}Eliminar Solicitud de Prueba{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:solicitud_detalle' solicitud.id %}" class="btn-admin btn-admin-secondary">
+    ← Volver a la Ficha
+  </a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 720px; margin: 0 auto;">
+
+  <div class="gestion-panel" style="border-top: 4px solid #dc2626;">
+    <div class="panel-header" style="margin-bottom: 1.25rem;">
+      <div>
+        <h2 class="panel-title" style="color: #dc2626; display: flex; align-items: center; gap: 0.5rem;">
+          ⚠️ Confirmación de Eliminación de Prueba
+        </h2>
+        <div style="font-size: 0.85rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+          Solicitud de prueba interna: <strong>{{ codigo_seguimiento }}</strong>
+        </div>
+      </div>
+      <span class="admin-badge badge-rojo" style="font-size: 0.75rem;">PRUEBA INTERNA</span>
+    </div>
+
+    <!-- Advertencia Formal Obligatoria -->
+    <div class="admin-alert admin-alert-danger" style="margin-bottom: 1.5rem; line-height: 1.6;">
+      <blockquote>
+        Esta acción eliminará permanentemente esta solicitud de prueba y sus registros dependientes. No afectará productos del catálogo ni solicitudes reales.
+      </blockquote>
+    </div>
+
+    <!-- Resumen de Datos de la Solicitud -->
+    <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1.25rem; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--admin-text-main); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">
+        Detalles del Registro a Eliminar
+      </h3>
+      
+      <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
+        <tbody>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted); width: 38%;">Código de seguimiento:</td>
+            <td style="padding: 0.6rem 0; font-family: monospace; font-weight: 700; color: var(--admin-primary);">{{ codigo_seguimiento }}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Nombre solicitante:</td>
+            <td style="padding: 0.6rem 0; font-weight: 600;">{{ nombre_solicitante }}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Establecimiento:</td>
+            <td style="padding: 0.6rem 0;">{{ establecimiento }}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Fecha de creación:</td>
+            <td style="padding: 0.6rem 0; color: var(--admin-text-muted);">{{ fecha|date:"d/m/Y H:i" }}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Cantidad de productos:</td>
+            <td style="padding: 0.6rem 0; font-weight: 600;">{{ cantidad_productos }} ítem(s)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Monto referencial:</td>
+            <td style="padding: 0.6rem 0; font-weight: 700; font-family: monospace;">${{ monto_referencial|stringformat:",d" }} CLP</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.6rem 0; font-weight: 600; color: var(--admin-text-muted);">Cotización formal asociada:</td>
+            <td style="padding: 0.6rem 0;">
+              {% if tiene_cotizacion_formal %}
+                <span class="admin-badge badge-amarillo" style="font-weight: 700;">⚠️ Sí (se eliminará en cascada)</span>
+              {% else %}
+                <span class="admin-badge badge-verde">No posee</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Formulario de Confirmación POST + CSRF -->
+    <form method="post" action="{% url 'gestion:solicitud_eliminar' solicitud.id %}" style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-top: 1.5rem;">
+      {% csrf_token %}
+      <input type="hidden" name="confirmar" value="1">
+      
+      <a href="{% url 'gestion:solicitud_detalle' solicitud.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.6rem 1.25rem;">
+        Cancelar
+      </a>
+
+      <button type="submit" class="btn-admin btn-admin-danger" style="background: #dc2626; color: #ffffff; font-weight: 700; padding: 0.6rem 1.5rem; border: none; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem;">
+        🗑️ ELIMINAR SOLICITUD DE PRUEBA
+      </button>
+    </form>
+
+  </div>
+
+</div>
+{% endblock %}

@@ -56,13 +56,16 @@ urlpatterns = [
     # Solicitudes Comerciales
     path("solicitudes/", solicitudes.solicitudes_lista_view, name="solicitudes_lista"),
     path("solicitudes/kanban/", solicitudes.solicitudes_kanban_view, name="solicitudes_kanban"),
+    path("solicitudes/eliminar-masivo/", solicitudes.solicitudes_eliminar_masivo_view, name="solicitudes_eliminar_masivo"),
     path("solicitudes/<int:id>/", solicitudes.solicitud_detalle_view, name="solicitud_detalle"),
+    path("solicitudes/<int:id>/eliminar/", solicitudes.solicitud_eliminar_view, name="solicitud_eliminar"),
     path("solicitudes/<int:id>/estado/", solicitudes.solicitud_cambiar_estado_view, name="solicitud_cambiar_estado"),
 
     # Establecimientos y Contactos
     path("establecimientos/", establecimientos.establecimientos_lista_view, name="establecimientos_lista"),
     path("establecimientos/<int:id>/", establecimientos.establecimiento_detalle_view, name="establecimiento_detalle"),
     path("contactos/", contactos.contactos_lista_view, name="contactos_lista"),
+    path("contactos/<int:id>/editar/", contactos.contacto_editar_view, name="contacto_editar"),
 
     # Cotizaciones Formales
     path("cotizaciones/", cotizaciones.cotizaciones_lista_view, name="cotizaciones_lista"),

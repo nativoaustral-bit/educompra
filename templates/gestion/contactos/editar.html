@@ -1,0 +1,124 @@
+{% extends "gestion/base_gestion.html" %}
+{% load static %}
+
+{% block title %}Editar Contacto: {{ contacto.nombre }} — Administración EduCompra{% endblock %}
+{% block page_title %}Editar Contacto Docente / Institucional{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'gestion:contactos_lista' %}" class="btn-admin btn-admin-secondary">
+    ← Volver a Contactos
+  </a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+
+  <div class="gestion-panel">
+    <div class="panel-header" style="margin-bottom: 1.5rem;">
+      <div>
+        <h2 class="panel-title">{{ contacto.nombre }}</h2>
+        <div style="font-size: 0.85rem; color: var(--admin-text-muted); margin-top: 0.25rem;">
+          ID Contacto: #{{ contacto.id }} | Email: {{ contacto.email }}
+        </div>
+      </div>
+      <div>
+        {% if contacto.activo %}
+          <span class="admin-badge badge-verde">Activo</span>
+        {% else %}
+          <span class="admin-badge badge-rojo">Inactivo</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'gestion:contacto_editar' contacto.id %}">
+      {% csrf_token %}
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+            Nombre Completo <span style="color: #dc2626;">*</span>
+          </label>
+          <input type="text" name="nombre" value="{{ contacto.nombre }}" required class="admin-input" style="width: 100%;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+            Cargo o Rol
+          </label>
+          <input type="text" name="cargo" value="{{ contacto.cargo }}" placeholder="Ej: Docente Tecnología, Jefe UTP..." class="admin-input" style="width: 100%;">
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+            Correo Electrónico <span style="color: #dc2626;">*</span>
+          </label>
+          <input type="email" name="email" value="{{ contacto.email }}" required class="admin-input" style="width: 100%;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+            Teléfono / WhatsApp
+          </label>
+          <input type="text" name="telefono" value="{{ contacto.telefono }}" placeholder="Ej: +56 9 94199879" class="admin-input" style="width: 100%; font-family: monospace;">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+          Establecimiento Principal
+        </label>
+        <select name="establecimiento_principal" class="admin-select" style="width: 100%;">
+          <option value="">-- Sin vincular a establecimiento --</option>
+          {% for est in establecimientos %}
+            <option value="{{ est.id }}" {% if contacto.establecimiento_principal_id == est.id %}selected{% endif %}>
+              {{ est.nombre }} ({{ est.comuna }}, {{ est.region }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="background: #f8fafc; border: 1px solid var(--admin-card-border); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1.25rem;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: var(--admin-text-main); margin-bottom: 0.75rem; text-transform: uppercase;">
+          Indicadores y Banderas
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="es_encargado_compras" {% if contacto.es_encargado_compras %}checked{% endif %}>
+            <span><strong>Es Encargado de Compras:</strong> El contacto tiene potestad de adquisición formal</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="posible_duplicado" {% if contacto.posible_duplicado %}checked{% endif %}>
+            <span><strong>Requiere Revisión de Duplicado:</strong> Marcar si comparte datos con otro docente</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="activo" {% if contacto.activo %}checked{% endif %}>
+            <span><strong>Contacto Activo:</strong> Habilitado para comunicaciones operativas</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">
+          Observaciones Internas
+        </label>
+        <textarea name="observaciones_internas" rows="4" placeholder="Notas sobre el contacto, disponibilidad horaria, proyectos de interés..." class="admin-input" style="width: 100%; font-size: 0.85rem;">{{ contacto.observaciones_internas }}</textarea>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 1.25rem;">
+        <a href="{% url 'gestion:contactos_lista' %}" class="btn-admin btn-admin-secondary">
+          Cancelar
+        </a>
+        <button type="submit" class="btn-admin btn-admin-primary" style="padding: 0.6rem 1.5rem; font-weight: 600;">
+          Guardar Cambios
+        </button>
+      </div>
+    </form>
+
+  </div>
+
+</div>
+{% endblock %}

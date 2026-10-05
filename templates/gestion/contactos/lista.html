@@ -48,6 +48,7 @@
           <th>Establecimiento Principal</th>
           <th>Alerta Duplicado</th>
           <th>Última Interacción</th>
+          <th style="text-align: right;">Acciones</th>
         </tr>
       </thead>
       <tbody>
@@ -59,7 +60,7 @@
             <td>
               <a href="mailto:{{ c.email }}" style="color: var(--admin-accent); font-weight: 500;">{{ c.email }}</a>
             </td>
-            <td style="font-size: 0.85rem;">
+            <td style="font-size: 0.85rem; font-family: monospace;">
               {{ c.telefono|default:"—" }}
             </td>
             <td style="font-size: 0.85rem; color: var(--admin-text-muted);">
@@ -85,10 +86,15 @@
             <td style="font-size: 0.85rem; color: var(--admin-text-muted); white-space: nowrap;">
               {{ c.ultima_interaccion|date:"d/m/Y"|default:"—" }}
             </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="{% url 'gestion:contacto_editar' c.id %}" class="btn-admin btn-admin-secondary" style="padding: 0.3rem 0.65rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                ✏️ Editar
+              </a>
+            </td>
           </tr>
         {% empty %}
           <tr>
-            <td colspan="7" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
+            <td colspan="8" style="text-align: center; padding: 3rem; color: var(--admin-text-muted);">
               No se encontraron contactos docentes registrados.
             </td>
           </tr>
