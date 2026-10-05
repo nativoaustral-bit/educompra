@@ -126,7 +126,7 @@ jobs:
           echo "Estado actual de productos publicados en base de datos: $PUB_ACTUAL"
           "$VENV_PYTHON" manage.py verificar_estado_catalogo_produccion
 
-          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-77}"
+          EXPECTED_PUB="${EXPECTED_PUBLISHED_COUNT:-78}"
           echo "Verificando contra estado esperado configurado ($EXPECTED_PUB productos publicados)..."
           if [ "$PUB_ACTUAL" -ne "$EXPECTED_PUB" ]; then
               echo "❌ ERROR: Cantidad de productos publicados ($PUB_ACTUAL) no coincide con el estado esperado configurado ($EXPECTED_PUB)." >&2
