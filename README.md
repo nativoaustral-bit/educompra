@@ -2,8 +2,8 @@
 
 [![Django Version](https://img.shields.io/badge/Django-5.1+-green.svg)](https://www.djangoproject.com/)
 [![Python Version](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue.svg)](https://www.python.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-75%20passing-brightgreen.svg)]()
-[![Production Status](https://img.shields.io/badge/Production-Fase%205A%20Activa%20(77%20Kits%20y%20Componentes)-success.svg)](https://educompra.humm.cl)
+[![Test Suite](https://img.shields.io/badge/Tests-105%20passing-brightgreen.svg)]()
+[![Production Status](https://img.shields.io/badge/Production-Fase%205A%20Activa%20(78%20Kits%20y%20Componentes)-success.svg)](https://educompra.humm.cl)
 
 **EduCompra Humm** ([educompra.humm.cl](https://educompra.humm.cl)) es la plataforma digital de **Humm SpA** especializada en abastecimiento y equipamiento tecnológico para establecimientos educacionales de Chile (colegios, liceos técnicos, SLEP y proyectos escolares).
 
@@ -11,7 +11,7 @@ A diferencia de un ecommerce tradicional B2C, EduCompra está optimizado para lo
 * **Explorar y aprender:** Fichas con descripciones pedagógicas, advertencias didácticas y tecnologías compatibles (Arduino, BBC micro:bit, Raspberry Pi, ESP32).
 * **Especificaciones técnicas neutras:** Preparadas para compras públicas (Ley 19.886), postulaciones a subvenciones (SEP, FAEP) y Mercado Público (Compra Ágil, Licitaciones y Convenio Marco).
 * **Canasta "Mi Cotización":** Los docentes y encargados de compras arman su selección de insumos y solicitan una cotización formal sin barreras de entrada ni pasarelas de pago.
-* **Plataforma de Administración `/gestion/`:** Portal operacional propio para la gestión comercial, seguimiento en Kanban de solicitudes, administración de catálogo, conciliación de colegios y telemetría de demanda no cubierta.
+* **Plataforma de Administración `/gestion/`:** Portal operacional propio para la gestión comercial, seguimiento en Kanban de solicitudes, administración de catálogo, conciliación de colegios, edición de contactos, limpieza controlada de pruebas y telemetría de primera parte.
 
 ---
 
@@ -23,7 +23,7 @@ El proyecto opera bajo el principio de **separación estricta entre código can�
                   ┌────────────────────────────────────────┐
                   │       GITHUB (Fuente Canónica)          │
                   │  • Código Django, Templates, Static    │
-                  │  • Workflows CI/CD, Tests (75 passing) │
+                  │  • Workflows CI/CD, Tests (105 passing)│
                   │  • Informes y Memoria Técnica (.md)    │
                   └───────────────────┬────────────────────┘
                                       │ GitHub Actions (Push a main)
@@ -51,6 +51,7 @@ El proyecto opera bajo el principio de **separación estricta entre código can�
 2. **Archivos Multimedia Persistentes:** Las fotos de los productos se almacenan en `/home1/paulocis/apps/educompra/media/` y en el DocumentRoot `/home1/paulocis/educompra.humm.cl/media/productos/`, persistiendo independientemente de los despliegues de código.
 3. **Exclusión de Archivos Sensibles y Markdown:** Por seguridad, ningún archivo `.md`, `.git`, `.env` ni copias de base de datos se transfieren ni permiten dentro del DocumentRoot.
 4. **Activación y Publicación Controlada:** Los despliegues automáticos **nunca** auto-publican ni alteran el catálogo de manera indiscriminada. Toda publicación requiere validación del Gate de Calidad mediante `ProductoPublicationService`.
+5. **Seguridad Operacional en Eliminaciones:** El backend prohíbe de forma inviolable la eliminación de solicitudes comerciales reales (`es_prueba=False`), autorizando únicamente la purga de pruebas internas con confirmación explícita y auditoría.
 
 ---
 
@@ -85,23 +86,23 @@ apps/
     ├── services_telemetria.py # Captura de eventos con anonimización irreversible (HMAC-SHA256)
     ├── services_auditoria.py  # Registro estructurado de actividad con sanitización de secretos
     ├── decorators.py      # Control de acceso por roles (gestion_required, permiso_requerido)
-    └── views/             # Dashboard, Kanban, Productos, Establecimientos, Pricing, Analítica
+    └── views/             # Dashboard, Kanban, Solicitudes, Contactos, Establecimientos, Pricing
 ```
 
 ---
 
 ## 3. Estado del Catálogo y Métricas Actuales
 
-A partir de la incorporación de listas de proveedor con tramos por volumen y la curaduría institucional de kits educativos:
+A partir de la incorporación de listas de proveedor con tramos por volumen, la curaduría institucional de kits educativos y la activación de kits STEM:
 
 | Métrica | Valor Actual | Estado |
 | :--- | :---: | :--- |
 | **Productos en Catálogo Maestro** | **960** | Inventario consolidado único Keyestudio (Fase 5A) |
 | **Curaduría Pedagógica 'VALIDADO'** | **88** | Fichas técnicas con curaduría y uso educativo formal |
-| **Productos Públicos en Tienda** | **77** | Expuestos en [educompra.humm.cl/catalogo/](https://educompra.humm.cl/catalogo/) (Inalterado) |
-| **Productos en Resguardo (No Públicos)** | **883** | Preservados en catálogo maestro (`publicado=False`) |
+| **Productos Públicos en Tienda** | **78** | Expuestos en [educompra.humm.cl/catalogo/](https://educompra.humm.cl/catalogo/) |
+| **Productos en Resguardo (No Públicos)** | **882** | Preservados en catálogo maestro (`publicado=False`) |
 | **Productos en Cuarentena** | **2** | `KS0240` y `60720227` pendientes de resolución proveedor |
-| **Kits Educativos Publicados** | **9** | Arduino (con y sin placa), micro:bit, ESP32, IoT, Didácticos |
+| **Kits Educativos Publicados** | **10** | Arduino, micro:bit, ESP32, IoT, Mini Tank V2.0, Didácticos |
 | **Kits en Espera de Fotografía** | **6** | Lote 2 resguardado por gate de calidad (`SIN_IMAGEN`) |
 
 ### Fórmulas de Pricing Institucional:
@@ -116,12 +117,20 @@ A partir de la incorporación de listas de proveedor con tramos por volumen y la
 Acceso seguro para el equipo de Humm en: **`https://educompra.humm.cl/gestion/`**
 
 ### Módulos Principales:
-1. **Dashboard Operacional:** Resumen de solicitudes activas, cotizaciones en trámite, establecimientos atendidos y métricas de navegación.
-2. **Embudo y Kanban de Solicitudes:** Seguimiento de estados comerciales: `NUEVA` $\rightarrow$ `EN_REVISION` $\rightarrow$ `CONTACTADO` $\rightarrow$ `COTIZADA` $\rightarrow$ `CERRADA_GANADA` / `CERRADA_PERDIDA`.
-3. **Catálogo y Publicación:** Edición pedagógica, carga controlada de fotografías y publicación auditada.
-4. **Directorio Escolar y Conciliación:** Gestión de colegios y contactos con jerarquía en 3 niveles (RUT exacto $\rightarrow$ Nombre+Comuna normalizado $\rightarrow$ Pendiente).
-5. **Configuración de Pricing:** Simulación y recálculo masivo de tipo de cambio y márgenes con confirmación explícita.
-6. **Analítica de Demanda y Búsquedas:** Identificación de términos buscados con 0 resultados para guiar futuras compras institucionales.
+1. **Dashboard Operacional:** Resumen de solicitudes activas, cotizaciones en trámite, establecimientos atendidos y métricas de navegación soberanas.
+2. **Embudo y Kanban de Solicitudes:** Seguimiento de estados comerciales: `NUEVA` $\rightarrow$ `EN_REVISION` $\rightarrow$ `REQUIERE_ANTECEDENTES` $\rightarrow$ `LISTA_PARA_COTIZAR` $\rightarrow$ `COTIZACION_ENVIADA` $\rightarrow$ `CERRADA` / `PERDIDA`.
+3. **Limpieza y Gestión Segura de Pruebas:**
+   * **Visualización Selectiva:** Pruebas internas excluidas por defecto y visualizables mediante `ver_pruebas=1`.
+   * **Eliminación Individual Controlada:** Disponible únicamente para solicitudes con `es_prueba=True` con pantalla de confirmación (código, solicitante, colegio, fecha, ítems, cotización formal), método `POST + CSRF` y eliminación en cascada de ítems/cotizaciones dependientes. Las solicitudes reales (`es_prueba=False`) están estrictamente blindadas en backend.
+   * **Limpieza Masiva de Pruebas:** Selección por checkbox en `ver_pruebas=1` y ejecución dentro de `transaction.atomic()`. Si se detecta cualquier solicitud real en la selección, la operación aborta por completo.
+   * **Auditoría Estructurada:** Todo borrado se registra en `RegistroActividad` con la descripción `ELIMINACIÓN CONTROLADA DE SOLICITUD DE PRUEBA`.
+4. **Directorio Escolar y Edición de Contactos:**
+   * Visualización consolidada de contactos docentes y encargados de adquisiciones.
+   * Formulario de edición en `/gestion/contactos/<id>/editar/` para nombre, cargo, email, teléfono/WhatsApp, colegio vinculado, permisos de compra, banderas de duplicados y observaciones internas (sin eliminación de contactos).
+   * Teléfono de contacto institucional actualizado y normalizado a **`+56 9 94199879`**.
+5. **Catálogo y Curaduría:** Edición pedagógica, carga controlada de fotografías y publicación auditada.
+6. **Configuración de Pricing:** Simulación y recálculo masivo de tipo de cambio y márgenes con confirmación explícita.
+7. **Analítica de Demanda y Búsquedas:** Identificación de términos buscados con 0 resultados para guiar futuras compras institucionales.
 
 ---
 
@@ -131,14 +140,11 @@ Para operaciones administrativas en servidor o desarrollo local:
 
 ### Auditoría y Verificación de Estado
 ```bash
-# Verifica que el catálogo contenga exactamente 960 productos en maestro y 77 publicados
+# Verifica que el catálogo contenga exactamente los 78 productos publicados
+python manage.py verificar_estado_catalogo_produccion --assert-publicados 78
+
+# Verificación de catálogo maestro consolidado
 python manage.py verificar_estado_catalogo_produccion --assert-960
-
-# Verificación de compatibilidad anterior
-python manage.py verificar_estado_catalogo_produccion --assert-77
-
-# Verificación configurable por cantidad arbitraria
-python manage.py verificar_estado_catalogo_produccion --assert-publicados 77
 
 # Inspección informativa general sin abortar
 python manage.py verificar_estado_catalogo_produccion
@@ -205,7 +211,7 @@ python manage.py migrate
 # 6. Configurar grupos y permisos administrativos
 python manage.py crear_roles_gestion
 
-# 7. Ejecutar suite completa de pruebas automatizadas (75 tests)
+# 7. Ejecutar suite completa de pruebas automatizadas (105 tests)
 python manage.py test
 
 # 8. Iniciar servidor de desarrollo
@@ -218,12 +224,12 @@ python manage.py runserver
 
 El archivo `.github/workflows/deploy.yml` orquesta el despliegue automático ante cada `push` a la rama `main`:
 
-1. **Gate de Calidad:** Configura Python 3.12 y ejecuta la suite completa de **75 pruebas automatizadas**. Si algún test falla, el despliegue se cancela inmediatamente.
+1. **Gate de Calidad:** Configura Python 3.12 y ejecuta la suite completa de **105 pruebas automatizadas**. Si algún test falla, el despliegue se cancela inmediatamente.
 2. **Empaquetado Selectivo:** Construye un bundle limpio excluyendo tests, Markdown, archivos `.git` y bases de datos (`tar -czf`).
 3. **Despliegue Atómico SSH:** Transmite el paquete a HostGator con reintentos automáticos para tolerar restricciones temporales de red o cPHulk.
 4. **Sincronización Web y Base de Datos:** Ejecuta migraciones, `crear_roles_gestion`, `collectstatic`, valida la integridad SQLite (`PRAGMA integrity_check`) y crea un snapshot de respaldo antes y después del despliegue.
-5. **Auditoría de Estado de Catálogo (Solo Lectura):** Comprueba que la base productiva contenga exactamente los **77 productos esperados** (`--assert-77`). Si la cantidad no coincide, el despliegue se detiene para prevenir inconsistencias.
-6. **Reinicio de Passenger y Smoke Test:** Recarga Phusion Passenger (`tmp/restart.txt`) y verifica que `/health/` y `/catalogo/` respondan HTTP 200 con 77 productos visibles en HTML.
+5. **Auditoría de Estado de Catálogo (Solo Lectura):** Comprueba que la base productiva contenga exactamente los **78 productos esperados** (`--assert-publicados 78`). Si la cantidad no coincide, el despliegue se detiene para prevenir inconsistencias.
+6. **Reinicio de Passenger y Smoke Test:** Recarga Phusion Passenger (`tmp/restart.txt`) y verifica que `/health/` y `/catalogo/` respondan HTTP 200 con 78 productos visibles en HTML.
 
 ---
 
