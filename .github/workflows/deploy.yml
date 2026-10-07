@@ -137,7 +137,7 @@ jobs:
 
           echo "=== 6. SINCRONIZACIÓN Y REINICIO DE PASSENGER ==="
           chmod 755 "$SUBDOMAIN_DIR"
-          cp -p "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
+          cp -f "${APP_DIR}/passenger_wsgi.py" "${SUBDOMAIN_DIR}/passenger_wsgi.py"
           chmod 755 "${SUBDOMAIN_DIR}/passenger_wsgi.py"
 
           # Limpieza estricta de DocumentRoot público: sin Markdown, sin Git, sin .env, sin SQLite
