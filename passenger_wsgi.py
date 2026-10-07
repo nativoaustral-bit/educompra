@@ -34,5 +34,26 @@ def application(environ, start_response):
     return _application(environ, start_response)
 
 if __name__ == "__main__" or "GATEWAY_INTERFACE" in os.environ:
-    from wsgiref.handlers import CGIHandler
-    CGIHandler().run(application)
+    from wsgiref.handlers import BaseCGIHandler
+
+    class SafeCGIHandler(BaseCGIHandler):
+        """
+        Manejador CGI blindado para entorno Apache/cPanel:
+        Aísla sys.stdout hacia sys.stderr durante la ejecución de Django para
+        evitar que cualquier salida de consola (print, backends de email, etc.)
+        contamine los encabezados HTTP y produzca 'malformed header' (Error 500).
+        La respuesta HTTP formal es despachada exclusivamente a través de stdout_buf.
+        """
+        def __init__(self, stdout_buf):
+            super().__init__(
+                sys.stdin.buffer,
+                stdout_buf,
+                sys.stderr,
+                dict(os.environ.items()),
+                multithread=False,
+                multiprocess=True,
+            )
+
+    real_stdout_buf = sys.stdout.buffer
+    sys.stdout = sys.stderr
+    SafeCGIHandler(real_stdout_buf).run(application)

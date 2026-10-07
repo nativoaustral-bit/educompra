@@ -257,7 +257,20 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 # ==============================================================================
 # CONFIGURACIÓN DE CORREO ELECTRÓNICO (NOTIFICACIONES DE COTIZACIÓN)
 # ==============================================================================
-EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+default_email_backend = (
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend"
+)
+EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", default_email_backend)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.resend.com" if not DEBUG else "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587 if not DEBUG else 25))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "resend" if not DEBUG else "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", os.getenv("RESEND_API_KEY", ""))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True" if not DEBUG else "False").lower() in ("true", "1", "yes")
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() in ("true", "1", "yes")
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", 10))
+
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EduCompra Humm <contacto@humm.cl>")
 HUMM_COTIZACIONES_EMAIL = os.getenv("HUMM_COTIZACIONES_EMAIL", os.getenv("NOTIFICACIONES_ADMIN_EMAIL", "contacto@humm.cl"))
 NOTIFICACIONES_ADMIN_EMAIL = HUMM_COTIZACIONES_EMAIL

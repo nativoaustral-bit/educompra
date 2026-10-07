@@ -6,7 +6,10 @@ Vistas de la aplicación de cotizaciones docentes:
 """
 
 import json
+import logging
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponseBadRequest, Http404
 from django.contrib import messages
@@ -203,8 +206,14 @@ def solicitar_cotizacion_view(request):
                 return redirect("cotizaciones:solicitud_recibida", token=solicitud.token)
             except ValidationError as e:
                 messages.error(request, str(e.message))
-            except Exception as e:
-                messages.error(request, "Ocurrió un error al procesar su solicitud. Por favor intente nuevamente.")
+            except Exception:
+                logger.exception(
+                    "Error no controlado creando solicitud de cotización en /solicitar-cotizacion/"
+                )
+                messages.error(
+                    request,
+                    "Ocurrió un error al procesar su solicitud. Por favor intente nuevamente."
+                )
         
         # Si el formulario fue inválido o falló la creación, generar un nuevo token de reintento
         nuevo_token = SubmissionService.generar_token_idempotencia(request)

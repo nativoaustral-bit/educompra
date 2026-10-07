@@ -2,7 +2,7 @@
 
 [![Django Version](https://img.shields.io/badge/Django-5.1+-green.svg)](https://www.djangoproject.com/)
 [![Python Version](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue.svg)](https://www.python.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-105%20passing-brightgreen.svg)]()
+[![Test Suite](https://img.shields.io/badge/Tests-109%20passing-brightgreen.svg)]()
 [![Production Status](https://img.shields.io/badge/Production-Fase%205A%20Activa%20(78%20Kits%20y%20Componentes)-success.svg)](https://educompra.humm.cl)
 
 **EduCompra Humm** ([educompra.humm.cl](https://educompra.humm.cl)) es la plataforma digital de **Humm SpA** especializada en abastecimiento y equipamiento tecnológico para establecimientos educacionales de Chile (colegios, liceos técnicos, SLEP y proyectos escolares).
@@ -23,7 +23,7 @@ El proyecto opera bajo el principio de **separación estricta entre código can�
                   ┌────────────────────────────────────────┐
                   │       GITHUB (Fuente Canónica)          │
                   │  • Código Django, Templates, Static    │
-                  │  • Workflows CI/CD, Tests (105 passing)│
+                  │  • Workflows CI/CD, Tests (109 passing)│
                   │  • Informes y Memoria Técnica (.md)    │
                   └───────────────────┬────────────────────┘
                                       │ GitHub Actions (Push a main)
@@ -211,7 +211,7 @@ python manage.py migrate
 # 6. Configurar grupos y permisos administrativos
 python manage.py crear_roles_gestion
 
-# 7. Ejecutar suite completa de pruebas automatizadas (105 tests)
+# 7. Ejecutar suite completa de pruebas automatizadas (109 tests)
 python manage.py test
 
 # 8. Iniciar servidor de desarrollo
@@ -224,7 +224,7 @@ python manage.py runserver
 
 El archivo `.github/workflows/deploy.yml` orquesta el despliegue automático ante cada `push` a la rama `main`:
 
-1. **Gate de Calidad:** Configura Python 3.12 y ejecuta la suite completa de **105 pruebas automatizadas**. Si algún test falla, el despliegue se cancela inmediatamente.
+1. **Gate de Calidad:** Configura Python 3.12 y ejecuta la suite completa de **109 pruebas automatizadas**. Si algún test falla, el despliegue se cancela inmediatamente.
 2. **Empaquetado Selectivo:** Construye un bundle limpio excluyendo tests, Markdown, archivos `.git` y bases de datos (`tar -czf`).
 3. **Despliegue Atómico SSH:** Transmite el paquete a HostGator con reintentos automáticos para tolerar restricciones temporales de red o cPHulk.
 4. **Sincronización Web y Base de Datos:** Ejecuta migraciones, `crear_roles_gestion`, `collectstatic`, valida la integridad SQLite (`PRAGMA integrity_check`) y crea un snapshot de respaldo antes y después del despliegue.
